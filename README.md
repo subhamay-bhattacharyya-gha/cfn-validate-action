@@ -83,7 +83,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Validate CloudFormation Templates
-        uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
+        uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'cloudformation'
@@ -135,7 +135,7 @@ jobs:
           aws-region: ${{ matrix.aws-region }}
 
       - name: Validate ${{ matrix.environment }} Templates
-        uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
+        uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: ${{ matrix.template-dir }}
@@ -175,7 +175,7 @@ jobs:
           aws-region: ap-southeast-2
 
       - name: Validate Custom Template
-        uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
+        uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'templates'
