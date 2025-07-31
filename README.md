@@ -1,8 +1,10 @@
 # CloudFormation Template Validator
 
-![Built with Copilot](https://img.shields.io/badge/Built_with-Copilot-brightgreen?logo=github)&nbsp;![Release](https://github.com/subhamay-bhattacharyya-gha/github-action-template/actions/workflows/release.yaml/badge.svg)&nbsp;![Commit Activity](https://img.shields.io/github/commit-activity/t/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![Last Commit](https://img.shields.io/github/last-commit/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![Release Date](https://img.shields.io/github/release-date/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![Repo Size](https://img.shields.io/github/repo-size/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![File Count](https://img.shields.io/github/directory-file-count/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![Issues](https://img.shields.io/github/issues/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![Top Language](https://img.shields.io/github/languages/top/subhamay-bhattacharyya-gha/github-action-template)&nbsp;![Custom Endpoint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bsubhamay/06e35985280456b113298ed56c626e73/raw/github-action-template.json?)
+![Built with Kiro](https://img.shields.io/badge/Built%20with-Kiro-blue?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMTMuMDkgOC4yNkwyMCA5TDEzLjA5IDE1Ljc0TDEyIDIyTDEwLjkxIDE1Ljc0TDQgOUwxMC45MSA4LjI2TDEyIDJaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K)&nbsp;![GitHub Action](https://img.shields.io/badge/GitHub-Action-blue?logo=github)&nbsp;![Release](https://github.com/subhamay-bhattacharyya-gha/cfn-validate-action/actions/workflows/release.yaml/badge.svg)&nbsp;![Commit Activity](https://img.shields.io/github/commit-activity/t/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Bash](https://img.shields.io/badge/Language-Bash-green?logo=gnubash)&nbsp;![CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange?logo=amazonaws)&nbsp;![Last Commit](https://img.shields.io/github/last-commit/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Release Date](https://img.shields.io/github/release-date/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Repo Size](https://img.shields.io/github/repo-size/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![File Count](https://img.shields.io/github/directory-file-count/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Issues](https://img.shields.io/github/issues/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Top Language](https://img.shields.io/github/languages/top/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Custom Endpoint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bsubhamay/0bcfd7d53cb4036029aa32cb81aac635/raw/cfn-validate-action.json?)
 
-A comprehensive GitHub Action that validates CloudFormation templates, nested templates, and parameters files with detailed error reporting and artifact generation.
+A comprehensive GitHub Action that validates CloudFormation templates, nested templates, and parameters files with comprehensive error reporting and artifact generation. Requires repository checkout and AWS credentials to be configured by caller workflow.
+
+> **Note**: This action requires the caller workflow to handle repository checkout and AWS credentials configuration. See [Prerequisites](#prerequisites) for details.
 
 ## Features
 
@@ -39,6 +41,15 @@ A comprehensive GitHub Action that validates CloudFormation templates, nested te
 
 ---
 
+## Prerequisites
+
+Before using this action, ensure your workflow includes:
+
+1. **Repository Checkout**: Use `actions/checkout@v4` to checkout your repository
+2. **AWS Credentials Configuration**: Use `aws-actions/configure-aws-credentials@v4` to configure AWS credentials
+
+This action focuses solely on CloudFormation validation and expects the repository to be checked out and AWS credentials to be configured by the caller workflow.
+
 ## Usage Examples
 
 ### Basic Usage
@@ -61,8 +72,18 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: cloudformation-validation-${{ github.run_id }}
+          aws-region: us-west-2
+
       - name: Validate CloudFormation Templates
-        uses: your-org/cloudformation-validator@v1
+        uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'cloudformation'
@@ -103,8 +124,18 @@ jobs:
             template-dir: infrastructure/prod
     
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: cloudformation-validation-${{ matrix.environment }}-${{ github.run_id }}
+          aws-region: ${{ matrix.aws-region }}
+
       - name: Validate ${{ matrix.environment }} Templates
-        uses: your-org/cloudformation-validator@v1
+        uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: ${{ matrix.template-dir }}
@@ -133,8 +164,18 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: cloudformation-validation-${{ github.run_id }}
+          aws-region: ap-southeast-2
+
       - name: Validate Custom Template
-        uses: your-org/cloudformation-validator@v1
+        uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'templates'
@@ -241,7 +282,7 @@ For GitHub Actions OIDC integration, ensure your IAM role has a trust policy sim
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:your-org/your-repo:*"
+          "token.actions.githubusercontent.com:sub": "repo:subhamay-bhattacharyya-gha/cfn-validate-action:*"
         }
       }
     }

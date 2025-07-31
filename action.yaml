@@ -1,6 +1,6 @@
 name: 'CloudFormation Template Validator'
-description: 'Validates CloudFormation templates, nested templates, and parameters files with comprehensive error reporting and artifact generation'
-author: 'GitHub Actions'
+description: 'Validates CloudFormation templates, nested templates, and parameters files with comprehensive error reporting and artifact generation. Requires repository checkout and AWS credentials to be configured by caller workflow.'
+author: 'Subhamay Bhattacharyya'
 branding:
   icon: 'check-circle'
   color: 'orange'
@@ -47,24 +47,6 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ inputs.aws-role-arn }}
-        role-session-name: cloudformation-validation-${{ github.run_id }}
-        aws-region: ${{ inputs.aws-region }}
-        role-duration-seconds: 3600
-      env:
-        # Enable debug logging for AWS CLI
-        AWS_CLI_FILE_ENCODING: utf-8
-        AWS_MAX_ATTEMPTS: 3
-        AWS_RETRY_MODE: adaptive
-
     - name: Validate main CloudFormation template
       id: main-validation
       shell: bash
@@ -943,13 +925,13 @@ runs:
             echo '  {"ParameterKey": "string", "ParameterValue": "string"}'
             echo ""
             echo "📄 Example of valid parameters file:"
-            cat << 'EOF'
-  [
-    {"ParameterKey": "Environment", "ParameterValue": "production"},
-    {"ParameterKey": "InstanceType", "ParameterValue": "t3.micro"}
-  ]
-EOF
-            
+            cat << EOF
+              [
+                {"ParameterKey": "Environment", "ParameterValue": "production"},
+                {"ParameterKey": "InstanceType", "ParameterValue": "t3.micro"}
+              ]
+              EOF
+                        
             # Create GitHub error annotations for each structure error
             local error_count=0
             while IFS= read -r error_line; do
@@ -1197,157 +1179,157 @@ EOF
         
         # Generate the main summary
         write_to_summary << EOF
-# ${OVERALL_ICON} CloudFormation Validation Summary
+          # ${OVERALL_ICON} CloudFormation Validation Summary
 
-## Overall Result: **${OVERALL_RESULT^^}**
+          ## Overall Result: **${OVERALL_RESULT^^}**
 
-$(if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
-  echo "### ❌ Failure Summary"
-  for reason in "${FAILURE_REASONS[@]}"; do
-    echo "- ${reason}"
-  done
-  echo ""
-fi)
+          $(if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
+            echo "### ❌ Failure Summary"
+            for reason in "${FAILURE_REASONS[@]}"; do
+              echo "- ${reason}"
+            done
+            echo ""
+          fi)
 
-| Validation Type | Status | Result | Details |
-|---|---|---|---|
-| **Main Template** | ${MAIN_ICON} | **${MAIN_RESULT^^}** | \`${TEMPLATE_PATH:-"N/A"}\` |
-| **Nested Templates** | ${NESTED_ICON} | **${NESTED_RESULT^^}** | ${{ steps.nested-validation.outputs.message || 'N/A' }} |
-| **Parameters File** | ${PARAMETERS_ICON} | **${PARAMETERS_RESULT^^}** | \`${PARAMETERS_PATH:-"N/A"}\` |
+          | Validation Type | Status | Result | Details |
+          |---|---|---|---|
+          | **Main Template** | ${MAIN_ICON} | **${MAIN_RESULT^^}** | \`${TEMPLATE_PATH:-"N/A"}\` |
+          | **Nested Templates** | ${NESTED_ICON} | **${NESTED_RESULT^^}** | ${{ steps.nested-validation.outputs.message || 'N/A' }} |
+          | **Parameters File** | ${PARAMETERS_ICON} | **${PARAMETERS_RESULT^^}** | \`${PARAMETERS_PATH:-"N/A"}\` |
 
----
+          ---
 
-## Validation Details
+          ## Validation Details
 
-### ${MAIN_ICON} Main Template Validation
-- **File**: \`${TEMPLATE_PATH:-"Not specified"}\`
-- **Status**: ${MAIN_RESULT^^}
-$(if [[ -n "${MAIN_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${MAIN_TIMESTAMP}"; fi)
-EOF
-        
-        # Add main template error details if failed
-        if [[ "${MAIN_RESULT}" == "failure" ]]; then
-          MAIN_ERROR="${{ steps.main-validation.outputs.error }}"
-          write_to_summary << EOF
-- **Error**: ${MAIN_ERROR:-"Unknown error"}
-EOF
+          ### ${MAIN_ICON} Main Template Validation
+          - **File**: \`${TEMPLATE_PATH:-"Not specified"}\`
+          - **Status**: ${MAIN_RESULT^^}
+          $(if [[ -n "${MAIN_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${MAIN_TIMESTAMP}"; fi)
+          EOF
+                  
+                  # Add main template error details if failed
+                  if [[ "${MAIN_RESULT}" == "failure" ]]; then
+                    MAIN_ERROR="${{ steps.main-validation.outputs.error }}"
+                    write_to_summary << EOF
+          - **Error**: ${MAIN_ERROR:-"Unknown error"}
+          EOF
         fi
         
         # Add nested templates details with comprehensive information
         write_to_summary << EOF
 
-### ${NESTED_ICON} Nested Templates Validation
-- **Status**: ${NESTED_RESULT^^}
-$(if [[ -n "${NESTED_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${NESTED_TIMESTAMP}"; fi)
-EOF
-        
-        if [[ "${NESTED_RESULT}" == "success" ]]; then
-          VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
-          SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
-          write_to_summary << EOF
-- **Templates Validated**: ${VALIDATED_COUNT:-"0"}
-$(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
-- **Result**: All nested templates validated successfully
-EOF
-        elif [[ "${NESTED_RESULT}" == "failure" ]]; then
-          VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
-          FAILED_COUNT="${{ steps.nested-validation.outputs.failed-count }}"
-          SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
-          FAILED_TEMPLATES="${{ steps.nested-validation.outputs.failed-templates }}"
-          write_to_summary << EOF
-- **Templates Validated**: ${VALIDATED_COUNT:-"0"}
-- **Templates Failed**: ${FAILED_COUNT:-"0"}
-$(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
-- **Failed Templates**: ${FAILED_TEMPLATES:-"Unknown"}
-EOF
-        else
-          NESTED_MESSAGE="${{ steps.nested-validation.outputs.message }}"
-          write_to_summary << EOF
-- **Result**: ${NESTED_MESSAGE:-"Nested templates validation was skipped"}
-EOF
-        fi
-        
-        # Add parameters file details with comprehensive information
-        write_to_summary << EOF
+        ### ${NESTED_ICON} Nested Templates Validation
+        - **Status**: ${NESTED_RESULT^^}
+        $(if [[ -n "${NESTED_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${NESTED_TIMESTAMP}"; fi)
+        EOF
+                
+                if [[ "${NESTED_RESULT}" == "success" ]]; then
+                  VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
+                  SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
+                  write_to_summary << EOF
+        - **Templates Validated**: ${VALIDATED_COUNT:-"0"}
+        $(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
+        - **Result**: All nested templates validated successfully
+        EOF
+                elif [[ "${NESTED_RESULT}" == "failure" ]]; then
+                  VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
+                  FAILED_COUNT="${{ steps.nested-validation.outputs.failed-count }}"
+                  SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
+                  FAILED_TEMPLATES="${{ steps.nested-validation.outputs.failed-templates }}"
+                  write_to_summary << EOF
+        - **Templates Validated**: ${VALIDATED_COUNT:-"0"}
+        - **Templates Failed**: ${FAILED_COUNT:-"0"}
+        $(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
+        - **Failed Templates**: ${FAILED_TEMPLATES:-"Unknown"}
+        EOF
+                else
+                  NESTED_MESSAGE="${{ steps.nested-validation.outputs.message }}"
+                  write_to_summary << EOF
+        - **Result**: ${NESTED_MESSAGE:-"Nested templates validation was skipped"}
+        EOF
+                fi
+                
+                # Add parameters file details with comprehensive information
+                write_to_summary << EOF
 
-### ${PARAMETERS_ICON} Parameters File Validation
-- **File**: \`${PARAMETERS_PATH:-"Not specified"}\`
-- **Status**: ${PARAMETERS_RESULT^^}
-$(if [[ -n "${PARAMETERS_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${PARAMETERS_TIMESTAMP}"; fi)
-EOF
-        
-        if [[ "${PARAMETERS_RESULT}" == "success" ]]; then
-          PARAM_COUNT="${{ steps.parameters-validation.outputs.parameters-count }}"
-          PARAM_KEYS="${{ steps.parameters-validation.outputs.parameter-keys }}"
-          write_to_summary << EOF
-- **Parameters Count**: ${PARAM_COUNT:-"0"}
-EOF
-          if [[ -n "${PARAM_KEYS}" ]] && [[ "${PARAM_KEYS}" != "" ]]; then
-            # Truncate parameter keys if too long for summary
-            if [[ ${#PARAM_KEYS} -gt 200 ]]; then
-              TRUNCATED_KEYS="${PARAM_KEYS:0:200}..."
-              write_to_summary << EOF
-- **Parameter Keys**: ${TRUNCATED_KEYS}
-EOF
-            else
-              write_to_summary << EOF
-- **Parameter Keys**: ${PARAM_KEYS}
-EOF
-            fi
-          fi
-        elif [[ "${PARAMETERS_RESULT}" == "failure" ]]; then
-          PARAM_ERROR="${{ steps.parameters-validation.outputs.error }}"
-          write_to_summary << EOF
-- **Error**: ${PARAM_ERROR:-"Unknown error"}
-EOF
-        else
-          PARAM_MESSAGE="${{ steps.parameters-validation.outputs.message }}"
-          write_to_summary << EOF
-- **Result**: ${PARAM_MESSAGE:-"Parameters validation was skipped"}
-EOF
-        fi
-        
-        # Add comprehensive footer with artifact and configuration information
-        write_to_summary << EOF
+        ### ${PARAMETERS_ICON} Parameters File Validation
+        - **File**: \`${PARAMETERS_PATH:-"Not specified"}\`
+        - **Status**: ${PARAMETERS_RESULT^^}
+        $(if [[ -n "${PARAMETERS_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${PARAMETERS_TIMESTAMP}"; fi)
+        EOF
+                
+                if [[ "${PARAMETERS_RESULT}" == "success" ]]; then
+                  PARAM_COUNT="${{ steps.parameters-validation.outputs.parameters-count }}"
+                  PARAM_KEYS="${{ steps.parameters-validation.outputs.parameter-keys }}"
+                  write_to_summary << EOF
+        - **Parameters Count**: ${PARAM_COUNT:-"0"}
+        EOF
+                  if [[ -n "${PARAM_KEYS}" ]] && [[ "${PARAM_KEYS}" != "" ]]; then
+                    # Truncate parameter keys if too long for summary
+                    if [[ ${#PARAM_KEYS} -gt 200 ]]; then
+                      TRUNCATED_KEYS="${PARAM_KEYS:0:200}..."
+                      write_to_summary << EOF
+        - **Parameter Keys**: ${TRUNCATED_KEYS}
+        EOF
+                    else
+                      write_to_summary << EOF
+        - **Parameter Keys**: ${PARAM_KEYS}
+        EOF
+                    fi
+                  fi
+                elif [[ "${PARAMETERS_RESULT}" == "failure" ]]; then
+                  PARAM_ERROR="${{ steps.parameters-validation.outputs.error }}"
+                  write_to_summary << EOF
+        - **Error**: ${PARAM_ERROR:-"Unknown error"}
+        EOF
+                else
+                  PARAM_MESSAGE="${{ steps.parameters-validation.outputs.message }}"
+                  write_to_summary << EOF
+        - **Result**: ${PARAM_MESSAGE:-"Parameters validation was skipped"}
+        EOF
+                fi
+                
+                # Add comprehensive footer with artifact and configuration information
+                write_to_summary << EOF
 
----
+        ---
 
-## 📁 Artifacts
+        ## 📁 Artifacts
 
-Detailed validation results and logs have been uploaded as artifacts:
-- **Artifact Name**: \`cloudformation-validation-results-${{ github.run_id }}\`
-- **Retention**: 30 days
-- **Contents**: Validation output files, error logs, and detailed results
+        Detailed validation results and logs have been uploaded as artifacts:
+        - **Artifact Name**: \`cloudformation-validation-results-${{ github.run_id }}\`
+        - **Retention**: 30 days
+        - **Contents**: Validation output files, error logs, and detailed results
 
-## 🔧 Action Configuration
+        ## 🔧 Action Configuration
 
-| Input | Value |
-|---|---|
-| **CloudFormation Directory** | \`${{ inputs.cloudformation-dir }}\` |
-| **Template File** | \`${{ inputs.template-file }}\` |
-| **Parameters File** | \`${{ inputs.parameters-file }}\` |
-| **AWS Region** | \`${{ inputs.aws-region }}\` |
-| **AWS Role ARN** | \`${{ inputs.aws-role-arn }}\` |
+        | Input | Value |
+        |---|---|
+        | **CloudFormation Directory** | \`${{ inputs.cloudformation-dir }}\` |
+        | **Template File** | \`${{ inputs.template-file }}\` |
+        | **Parameters File** | \`${{ inputs.parameters-file }}\` |
+        | **AWS Region** | \`${{ inputs.aws-region }}\` |
+        | **AWS Role ARN** | \`${{ inputs.aws-role-arn }}\` |
 
-## 📊 Execution Summary
+        ## 📊 Execution Summary
 
-- **Workflow Run ID**: ${{ github.run_id }}
-- **Summary Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-- **Repository**: ${{ github.repository }}
-- **Branch/Ref**: ${{ github.ref }}
+        - **Workflow Run ID**: ${{ github.run_id }}
+        - **Summary Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+        - **Repository**: ${{ github.repository }}
+        - **Branch/Ref**: ${{ github.ref }}
 
-$(if [[ "${OVERALL_RESULT}" == "failure" ]]; then
-  echo "## 🔧 Troubleshooting"
-  echo ""
-  echo "The validation failed. Check the detailed logs above and the uploaded artifacts for more information."
-  echo ""
-  echo "### Common Issues:"
-  echo "- **Template Syntax Errors**: Check your CloudFormation template syntax"
-  echo "- **AWS Authentication**: Verify your AWS credentials and IAM permissions"
-  echo "- **File Paths**: Ensure template and parameter files exist at the specified paths"
-  echo "- **JSON Format**: Verify parameters file is valid JSON with correct structure"
-fi)
-EOF
+        $(if [[ "${OVERALL_RESULT}" == "failure" ]]; then
+          echo "## 🔧 Troubleshooting"
+          echo ""
+          echo "The validation failed. Check the detailed logs above and the uploaded artifacts for more information."
+          echo ""
+          echo "### Common Issues:"
+          echo "- **Template Syntax Errors**: Check your CloudFormation template syntax"
+          echo "- **AWS Authentication**: Verify your AWS credentials and IAM permissions"
+          echo "- **File Paths**: Ensure template and parameter files exist at the specified paths"
+          echo "- **JSON Format**: Verify parameters file is valid JSON with correct structure"
+        fi)
+        EOF
         
         echo "✅ Markdown summary generated successfully"
         echo "::endgroup::"
