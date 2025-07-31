@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Template for testing invalid parameters'
+
+Parameters:
+  TestParam:
+    Type: String
+    Description: 'Test parameter'
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'test-${TestParam}'
+
+Outputs:
+  BucketName:
+    Value: !Ref TestBucket

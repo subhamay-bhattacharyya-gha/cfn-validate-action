@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Simple template without parameters file'
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-no-params-bucket'
+
+Outputs:
+  BucketName:
+    Description: 'Bucket name'
+    Value: !Ref TestBucket

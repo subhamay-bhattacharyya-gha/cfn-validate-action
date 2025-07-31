@@ -1,0 +1,6 @@
+{
+  "InvalidStructure": "This should be an array",
+  "ParameterKey": "TestParam",
+  "ParameterValue": "test-value"
+  // This comment makes it invalid JSON
+}

@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Template for testing parameters validation'
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: 'Name for the S3 bucket'
+  
+  Environment:
+    Type: String
+    Description: 'Environment tag'
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref BucketName
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  BucketName:
+    Description: 'Created bucket name'
+    Value: !Ref TestBucket
