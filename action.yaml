@@ -103,14 +103,14 @@ runs:
         echo "✅ Template file found: ${{ inputs.template-file }}"
         
         # Validate file is readable and not empty
-        if [[ ! -r "${{ inputs.template-file }}}" ]]; then
+        if [[ ! -r "${{ github.workspace }}/${{ inputs.template-file }}}" ]]; then
           echo "::error::Template file is not readable: ${{ inputs.template-file }}"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=Template file is not readable" >> $GITHUB_OUTPUT
           exit 1
         fi
         
-        FILE_SIZE=$(stat -f%z "${{ inputs.template-file }}" 2>/dev/null || stat -c%s "$${{ inputs.template-file }}" 2>/dev/null || echo "0")
+        FILE_SIZE=$(stat -f%z "${{ github.workspace }}/${{ inputs.template-file }}" 2>/dev/null || stat -c%s "${{ github.workspace }}/${{ inputs.template-file }}" 2>/dev/null || echo "0")
         if [[ "${FILE_SIZE}" -eq 0 ]]; then
           echo "::error::Template file is empty: ${{ inputs.template-file }}"
           echo "result=failure" >> $GITHUB_OUTPUT
@@ -125,7 +125,7 @@ runs:
         
         # Log template file preview for debugging
         echo "::group::📄 Template File Preview (first 10 lines)"
-        head -10 "${{ inputs.template-file }}" 2>/dev/null || echo "Unable to preview template file"
+        head -10 "${{ github.workspace }}/${{ inputs.template-file }}" 2>/dev/null || echo "Unable to preview template file"
         echo "::endgroup::"
 
 
