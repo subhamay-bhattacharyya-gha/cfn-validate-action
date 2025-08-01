@@ -103,7 +103,7 @@ runs:
         echo "✅ Template file found: ${{ inputs.template-file }}"
         
         # Validate file is readable and not empty
-        if [[ ! -r "${{ github.workspace }}/${{ inputs.template-file }}}" ]]; then
+        if [[ ! -r "${{ github.workspace }}/${{ inputs.template-file }}" ]]; then
           echo "::error::Template file is not readable: ${{ inputs.template-file }}"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=Template file is not readable" >> $GITHUB_OUTPUT
