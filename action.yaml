@@ -139,6 +139,20 @@ runs:
                 | jq 'map({ (."ParameterName"): ."ParameterValue" }) | add')
         echo "Input JSON : $INPUT_JSON"
 
+        mkdir -p ${{ inputs.cloudformation-dir }}/validation-output
+        aws cloudformation validate-template \
+              --template-body "file://${TEMPLATE_PATH}" \
+              --region "${{ inputs.aws-region }}" \
+              --cli-input-json $INPUT_JSON \
+              --output json > ${{ inputs.cloudformation-dir }}/validation-output/template-validation.json \
+              2> ${{ inputs.cloudformation-dir }}/validation-output/template-errors.log
+
+        echo "********************  template-validation.json  **************************"
+        cat ${{ inputs.cloudformation-dir }}/validation-output/template-validation.json
+        echo "********************  template-errors.log  *******************************"
+        cat ${{ inputs.cloudformation-dir }}/validation-output/template-errors.log
+
+
 
     #   env:
     #     # AWS CLI configuration for retries and timeouts
