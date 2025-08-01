@@ -130,7 +130,7 @@ runs:
         else
           FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
         fi
-        
+
         OUTPUT_DIR="${TEMPLATE_DIR}/validation-output"
 
         mkdir -p "$OUTPUT_DIR"
@@ -146,269 +146,62 @@ runs:
 
         VALIDATION_EXIT_CODE=$?
 
-        echo "********************  template-validation.json  **************************"
-        cat "$OUTPUT_DIR/template-validation.json" || echo "No validation output found"
-
-        echo "********************  template-errors.log  *******************************"
-        cat "$OUTPUT_DIR/template-errors.log" || echo "No error log found"
-
-        if [[ $VALIDATION_EXIT_CODE -eq 0 ]]; then
-          echo "✅ Template validation passed"
-          echo "validation-result=success" >> "$GITHUB_OUTPUT"
-        else
-          echo "::error::Template validation failed. See logs above."
-          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+        if [[ $VALIDATION_EXIT_CODE -neq 0 ]]; then
+          exit $VALIDATION_EXIT_CODE
         fi
 
 
+    - name: Validation summary
+      id: summary
+      if: always()
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
 
+        TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
+        OUTPUT_DIR="${TEMPLATE_DIR}/validation-output"
+        SUMMARY_FILE_SUCCESS="${OUTPUT_DIR}/template-validation.json"
+        SUMMARY_FILE_ERRORS="${OUTPUT_DIR}/template-errors.log"
 
+        echo "::group::📊 Validation Summary"
+        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "📁 Output Directory: $OUTPUT_DIR"
 
-    #   env:
-    #     # AWS CLI configuration for retries and timeouts
-    #     AWS_MAX_ATTEMPTS: 3
-    #     AWS_RETRY_MODE: adaptive
-    #     AWS_CLI_READ_TIMEOUT: 300
-    #     AWS_CLI_CONNECT_TIMEOUT: 60
-    #   run: |
+        SUMMARY_MARKDOWN="### 📊 CloudFormation Template Validation Summary\n\n"
 
-        
-    #     # Set environment variables with validation
-    #     CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
-    #     TEMPLATE_FILE="${{ inputs.template-file }}"
-    #     TEMPLATE_PATH="${{ github.workspace }}/${TEMPLATE_FILE}"
-        
+        if [[ -s "$SUMMARY_FILE_SUCCESS" ]]; then
+          echo "✅ Template validation output exists:"
+          cat "$SUMMARY_FILE_SUCCESS"
 
-        
-    #     # Validate template using AWS CLI with comprehensive error handling
-    #     echo "🔄 Running AWS CloudFormation template validation..."
-    #     echo "⏱️ Validation started at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        
-    #     # Function to perform AWS CLI validation with retry logic
-    #     validate_template_with_retry() {
-    #       local attempt=1
-    #       local max_attempts=3
-    #       local retry_delay=5
-          
-    #       while [[ $attempt -le $max_attempts ]]; do
-    #         echo "🔄 Validation attempt ${attempt}/${max_attempts}"
-            
-    #         # Set timeout for the AWS CLI command
-    #         if timeout 300 aws cloudformation validate-template \
-    #           --template-body "file://${TEMPLATE_PATH}" \
-    #           --region "${{ inputs.aws-region }}" \
-    #           --output json > validation-output/main-template-validation.json 2> validation-output/main-template-errors.log; then
-              
-    #           echo "✅ Template validation successful on attempt ${attempt}!"
-    #           return 0
-    #         else
-    #           local exit_code=$?
-    #           echo "❌ Validation attempt ${attempt} failed with exit code: ${exit_code}"
-              
-    #           # Log error details for this attempt
-    #           if [[ -f validation-output/main-template-errors.log ]]; then
-    #             echo "::group::🔍 Error details for attempt ${attempt}"
-    #             cat validation-output/main-template-errors.log
-    #             echo "::endgroup::"
-                
-    #             # Check for specific error types that shouldn't be retried
-    #             if grep -q "ValidationError" validation-output/main-template-errors.log; then
-    #               echo "🚫 Template syntax error detected - not retrying"
-    #               return $exit_code
-    #             fi
-                
-    #             if grep -q "AccessDenied\|UnauthorizedOperation\|InvalidUserID.NotFound" validation-output/main-template-errors.log; then
-    #               echo "🚫 Authentication/authorization error detected - not retrying"
-    #               return $exit_code
-    #             fi
-    #           fi
-              
-    #           if [[ $attempt -lt $max_attempts ]]; then
-    #             echo "⏳ Waiting ${retry_delay} seconds before retry..."
-    #             sleep $retry_delay
-    #             retry_delay=$((retry_delay * 2))  # Exponential backoff
-    #           fi
-              
-    #           attempt=$((attempt + 1))
-    #         fi
-    #       done
-          
-    #       echo "❌ All validation attempts failed"
-    #       return 1
-    #     }
-        
-    #     # Execute validation with retry logic
-    #     if validate_template_with_retry; then
-    #       echo "⏱️ Validation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          
-    #       # Validate that the output file was created and is valid JSON
-    #       if [[ ! -f validation-output/main-template-validation.json ]]; then
-    #         echo "::error::Validation output file was not created"
-    #         echo "result=failure" >> $GITHUB_OUTPUT
-    #         echo "error=Validation output file missing" >> $GITHUB_OUTPUT
-    #         exit 1
-    #       fi
-          
-    #       # Validate JSON output
-    #       if ! jq empty validation-output/main-template-validation.json 2>/dev/null; then
-    #         echo "::error::Validation output is not valid JSON"
-    #         echo "🔍 Raw output content:"
-    #         cat validation-output/main-template-validation.json 2>/dev/null || echo "Unable to read output file"
-    #         echo "result=failure" >> $GITHUB_OUTPUT
-    #         echo "error=Invalid JSON in validation output" >> $GITHUB_OUTPUT
-    #         exit 1
-    #       fi
-          
-    #       # Display template capabilities and parameters using jq
-    #       echo "::group::📋 Template Details"
-          
-    #       # Extract and display description
-    #       DESCRIPTION=$(jq -r '.Description // "No description provided"' validation-output/main-template-validation.json)
-    #       echo "📝 Description: ${DESCRIPTION}"
-          
-    #       # Extract and display capabilities
-    #       CAPABILITIES=$(jq -r '.Capabilities[]? // empty' validation-output/main-template-validation.json)
-    #       if [[ -n "${CAPABILITIES}" ]]; then
-    #         echo "🔐 Required Capabilities:"
-    #         echo "${CAPABILITIES}" | while read -r capability; do
-    #           echo "  - ${capability}"
-    #         done
-            
-    #         # Display capabilities reason if available
-    #         CAPABILITIES_REASON=$(jq -r '.CapabilitiesReason // empty' validation-output/main-template-validation.json)
-    #         if [[ -n "${CAPABILITIES_REASON}" ]]; then
-    #           echo "💡 Reason: ${CAPABILITIES_REASON}"
-    #         fi
-    #       else
-    #         echo "🔐 No special capabilities required"
-    #       fi
-          
-    #       # Extract and display parameters
-    #       PARAMETERS=$(jq -r '.Parameters[]? // empty' validation-output/main-template-validation.json)
-    #       if [[ -n "${PARAMETERS}" ]]; then
-    #         echo "📝 Template Parameters:"
-    #         jq -r '.Parameters[] | "  - \(.ParameterKey): \(.Description // "No description") (Default: \(.DefaultValue // "None"))"' validation-output/main-template-validation.json
-            
-    #         # Count parameters
-    #         PARAM_COUNT=$(jq '.Parameters | length' validation-output/main-template-validation.json)
-    #         echo "📊 Total parameters: ${PARAM_COUNT}"
-    #       else
-    #         echo "📝 No parameters defined in template"
-    #       fi
-          
-    #       # Extract and display metadata if available
-    #       METADATA=$(jq -r '.Metadata // empty' validation-output/main-template-validation.json)
-    #       if [[ -n "${METADATA}" ]] && [[ "${METADATA}" != "null" ]]; then
-    #         echo "🏷️ Template includes metadata"
-    #       fi
-          
-    #       echo "::endgroup::"
-          
-    #       # Set success outputs
-    #       echo "result=success" >> $GITHUB_OUTPUT
-    #       echo "template-path=${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
-    #       echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          
-    #     else
-    #       echo "❌ Template validation failed after all retry attempts!"
-    #       echo "⏱️ Validation failed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          
-    #       # Comprehensive error analysis and reporting
-    #       echo "::group::🔍 Detailed Error Analysis"
-          
-    #       if [[ -f validation-output/main-template-errors.log ]]; then
-    #         echo "📄 Raw error output:"
-    #         cat validation-output/main-template-errors.log
-    #         echo ""
-            
-    #         # Extract and categorize different types of errors
-    #         ERROR_CONTENT=$(cat validation-output/main-template-errors.log)
-            
-    #         # Try multiple methods to extract error messages
-    #         ERROR_MESSAGE=""
-            
-    #         # Method 1: Extract JSON error message
-    #         JSON_ERROR=$(echo "${ERROR_CONTENT}" | grep -o '"message":"[^"]*"' | sed 's/"message":"\([^"]*\)"/\1/' | head -1)
-    #         if [[ -n "${JSON_ERROR}" ]]; then
-    #           ERROR_MESSAGE="${JSON_ERROR}"
-    #         fi
-            
-    #         # Method 2: Extract ValidationError
-    #         if [[ -z "${ERROR_MESSAGE}" ]]; then
-    #           VALIDATION_ERROR=$(echo "${ERROR_CONTENT}" | grep -o "ValidationError[^:]*: [^\\n]*" | head -1)
-    #           if [[ -n "${VALIDATION_ERROR}" ]]; then
-    #             ERROR_MESSAGE="${VALIDATION_ERROR}"
-    #           fi
-    #         fi
-            
-    #         # Method 3: Extract any error line
-    #         if [[ -z "${ERROR_MESSAGE}" ]]; then
-    #           ERROR_MESSAGE=$(echo "${ERROR_CONTENT}" | grep -i "error" | head -1)
-    #         fi
-            
-    #         # Method 4: Use first non-empty line
-    #         if [[ -z "${ERROR_MESSAGE}" ]]; then
-    #           ERROR_MESSAGE=$(echo "${ERROR_CONTENT}" | grep -v "^$" | head -1)
-    #         fi
-            
-    #         # Categorize error types for better user guidance
-    #         if echo "${ERROR_CONTENT}" | grep -q "ValidationError"; then
-    #           echo "🏷️ Error Type: Template Syntax/Structure Error"
-    #           echo "💡 Suggestion: Check your CloudFormation template syntax and structure"
-    #         elif echo "${ERROR_CONTENT}" | grep -q "AccessDenied\|UnauthorizedOperation"; then
-    #           echo "🏷️ Error Type: AWS Authentication/Authorization Error"
-    #           echo "💡 Suggestion: Check your AWS credentials and IAM permissions"
-    #         elif echo "${ERROR_CONTENT}" | grep -q "InvalidUserID.NotFound"; then
-    #           echo "🏷️ Error Type: AWS Account/User Error"
-    #           echo "💡 Suggestion: Verify your AWS account configuration"
-    #         elif echo "${ERROR_CONTENT}" | grep -q "RequestLimitExceeded\|Throttling"; then
-    #           echo "🏷️ Error Type: AWS API Rate Limiting"
-    #           echo "💡 Suggestion: The validation was rate limited, try again later"
-    #         elif echo "${ERROR_CONTENT}" | grep -q "ServiceUnavailable\|InternalError"; then
-    #           echo "🏷️ Error Type: AWS Service Error"
-    #           echo "💡 Suggestion: AWS CloudFormation service may be experiencing issues"
-    #         else
-    #           echo "🏷️ Error Type: Unknown Error"
-    #           echo "💡 Suggestion: Check the error details above for more information"
-    #         fi
-            
-    #         # Create appropriate GitHub error annotation
-    #         if [[ -n "${ERROR_MESSAGE}" ]]; then
-    #           echo "::error title=CloudFormation Validation Failed::${ERROR_MESSAGE}"
-    #         else
-    #           echo "::error title=CloudFormation Validation Failed::Template validation failed. Check logs for details."
-    #         fi
-            
-    #       else
-    #         echo "❌ No error log file found"
-    #         ERROR_MESSAGE="Template validation failed with no error details"
-    #         echo "::error title=CloudFormation Validation Failed::${ERROR_MESSAGE}"
-    #       fi
-          
-    #       echo "::endgroup::"
-          
-    #       # Set failure outputs
-    #       echo "result=failure" >> $GITHUB_OUTPUT
-    #       echo "template-path=${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
-    #       echo "error=${ERROR_MESSAGE:-"Template validation failed"}" >> $GITHUB_OUTPUT
-    #       echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          
-    #       exit 1
-    #     fi
+          SUMMARY_MARKDOWN+="✅ **Validation Passed**\n\n"
+          SUMMARY_MARKDOWN+="<details><summary>📄 Validation Output (click to expand)</summary>\n\n\`\`\`json\n"
+          cat "$SUMMARY_FILE_SUCCESS" >> "$GITHUB_STEP_SUMMARY"
+          SUMMARY_MARKDOWN+="$(cat "$SUMMARY_FILE_SUCCESS")"
+          SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
+          echo "validation-result=success" >> "$GITHUB_OUTPUT"
 
-    # - name: Generate validation summary
-    #   id: summary
-    #   if: always()
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-        
-    #     # Enable detailed logging
-    #     echo "::group::🔧 Debug Information"
-    #     echo "📊 Starting validation summary generation"
-    #     echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-    #     echo "🔧 Summary generation always runs regardless of previous step results"
-    #     echo "::endgroup::"
+        elif [[ -s "$SUMMARY_FILE_ERRORS" ]]; then
+          echo "❌ Template validation errors found:"
+          cat "$SUMMARY_FILE_ERRORS"
+
+          SUMMARY_MARKDOWN+="❌ **Validation Failed**\n\n"
+          SUMMARY_MARKDOWN+="<details><summary>🚫 Error Log (click to expand)</summary>\n\n\`\`\`text\n"
+          SUMMARY_MARKDOWN+="$(cat "$SUMMARY_FILE_ERRORS")"
+          SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
+          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+
+        else
+          echo "⚠️ No validation output or errors found — unexpected state"
+          SUMMARY_MARKDOWN+="⚠️ **No validation output or errors found** — unexpected state\n"
+          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "::endgroup::"
+
+        # Write Markdown summary to GitHub Action summary panel
+        echo -e "$SUMMARY_MARKDOWN" >> "$GITHUB_STEP_SUMMARY"
+
         
     #     echo "📊 Generating comprehensive validation summary..."
         
