@@ -71,7 +71,7 @@ runs:
         # Set environment variables with validation
         CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
         TEMPLATE_FILE="${{ inputs.template-file }}"
-        TEMPLATE_PATH="${{ github.workspace }}/${CLOUDFORMATION_DIR}/${TEMPLATE_FILE}"
+        TEMPLATE_PATH="${{ github.workspace }}/${TEMPLATE_FILE}"
         
         echo "::group::📋 Configuration"
         echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
