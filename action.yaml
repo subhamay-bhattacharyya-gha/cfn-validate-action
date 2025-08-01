@@ -112,8 +112,6 @@ runs:
         head -10 "$FULL_TEMPLATE_PATH" || echo "Unable to preview template"
         echo "::endgroup::"
 
-
-
     - name: Validate the CloudFormation template
       id: validate-cloudformation-template
       shell: bash
@@ -146,10 +144,9 @@ runs:
 
         VALIDATION_EXIT_CODE=$?
 
-        if [[ $VALIDATION_EXIT_CODE -neq 0 ]]; then
+        if [[ $VALIDATION_EXIT_CODE -ne 0 ]]; then
           exit $VALIDATION_EXIT_CODE
         fi
-
 
     - name: Validation summary
       id: summary
@@ -171,36 +168,19 @@ runs:
         SUMMARY_MARKDOWN="### 📊 CloudFormation Template Validation Summary\n\n"
 
         if [[ -s "$SUMMARY_FILE_SUCCESS" ]]; then
-          echo "✅ Template validation output exists:"
-          cat "$SUMMARY_FILE_SUCCESS"
-
           SUMMARY_MARKDOWN+="✅ **Validation Passed**\n\n"
           SUMMARY_MARKDOWN+="<details><summary>📄 Validation Output (click to expand)</summary>\n\n\`\`\`json\n"
-          cat "$SUMMARY_FILE_SUCCESS" >> "$GITHUB_STEP_SUMMARY"
           SUMMARY_MARKDOWN+="$(cat "$SUMMARY_FILE_SUCCESS")"
           SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
           echo "validation-result=success" >> "$GITHUB_OUTPUT"
 
         elif [[ -s "$SUMMARY_FILE_ERRORS" ]]; then
-          echo "❌ Template validation errors found:"
-          cat "$SUMMARY_FILE_ERRORS"
-
           SUMMARY_MARKDOWN+="❌ **Validation Failed**\n\n"
           SUMMARY_MARKDOWN+="<details><summary>🚫 Error Log (click to expand)</summary>\n\n\`\`\`text\n"
           SUMMARY_MARKDOWN+="$(cat "$SUMMARY_FILE_ERRORS")"
           SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
-          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+          echo "va
 
-        else
-          echo "⚠️ No validation output or errors found — unexpected state"
-          SUMMARY_MARKDOWN+="⚠️ **No validation output or errors found** — unexpected state\n"
-          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
-        fi
-
-        echo "::endgroup::"
-
-        # Write Markdown summary to GitHub Action summary panel
-        echo -e "$SUMMARY_MARKDOWN" >> "$GITHUB_STEP_SUMMARY"
 
         
     #     echo "📊 Generating comprehensive validation summary..."
