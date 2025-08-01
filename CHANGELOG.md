@@ -5,15 +5,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
-
-- **parameters**: New `parameters` input field for passing CloudFormation parameters directly as JSON array
-  - Accepts parameters in the format: `[{"ParameterName": "string", "ParameterValue": "string"}]`
-  - Takes precedence over `parameters-file` when both are provided
-  - Maintains full backward compatibility with existing `parameters-file` input
-  - Enables dynamic parameter handling without creating intermediate files
-
 ### BREAKING CHANGES
+
+- **parameters**: Removed `parameters-file` input in favor of direct JSON parameter input
+  - The `parameters-file` input has been completely removed
+  - Parameters must now be passed directly via the `parameters` input as JSON array
+  - Format: `[{"ParameterName": "string", "ParameterValue": "string"}]`
+  - Enables dynamic parameter handling without creating intermediate files
 
 - **action**: Removed built-in repository checkout and AWS credentials configuration steps
   - The action no longer includes `actions/checkout@v4` step
@@ -43,13 +41,11 @@ steps:
       # your existing configuration
 ```
 
-### New Parameters Input Feature
+### Parameters Input Migration
 
-The action now supports passing CloudFormation parameters directly as input, providing more flexibility for dynamic parameter handling.
+The action now requires CloudFormation parameters to be passed directly as JSON input instead of using parameter files.
 
-#### Usage Examples
-
-**Using the new `parameters` input:**
+#### New Usage
 
 ```yaml
 - name: Validate CloudFormation Templates
@@ -69,8 +65,11 @@ The action now supports passing CloudFormation parameters directly as input, pro
       ]
 ```
 
-**Traditional file-based approach (still supported):**
+#### Migration from File-Based Parameters
 
+If you were previously using `parameters-file`, you need to convert your parameter file content to the `parameters` input:
+
+**Before (no longer supported):**
 ```yaml
 - name: Validate CloudFormation Templates
   uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
@@ -79,13 +78,24 @@ The action now supports passing CloudFormation parameters directly as input, pro
     parameters-file: 'cloudformation/parameters.json'
 ```
 
-#### Migration Path
-
-You can migrate from file-based to input-based parameters gradually:
-
-1. **Current file-based approach** - No changes needed, continues to work as before
-2. **Mixed approach** - Use `parameters` input for dynamic values, `parameters-file` for static ones (parameters input takes precedence)
-3. **Full migration** - Convert all parameters to the new input format
+**After (required):**
+```yaml
+- name: Validate CloudFormation Templates
+  uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
+  with:
+    template-path: 'cloudformation/template.yaml'
+    parameters: |
+      [
+        {
+          "ParameterName": "Environment",
+          "ParameterValue": "production"
+        },
+        {
+          "ParameterName": "InstanceType",
+          "ParameterValue": "t3.micro"
+        }
+      ]
+```
 
 #### Parameter Format
 
@@ -100,9 +110,9 @@ The `parameters` input expects a JSON array of objects with the following struct
 ]
 ```
 
-#### Backward Compatibility
+#### Breaking Changes Impact
 
-- Existing workflows using `parameters-file` continue to work unchanged
-- When both `parameters` and `parameters-file` are provided, `parameters` takes precedence
-- When neither is provided, parameter validation is skipped (same as before)
-- All existing outputs and error handling remain the same
+- The `parameters-file` input has been completely removed
+- Workflows using `parameters-file` will fail until migrated to use `parameters` input
+- Parameter file references in documentation and examples are no longer valid
+- All parameter validation now occurs on the JSON input format only

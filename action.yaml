@@ -18,10 +18,6 @@ inputs:
     description: 'CloudFormation parameters as JSON array string in format: [{"ParameterName":"string","ParameterValue":"string"}]'
     required: false
     default: ''
-  parameters-file:
-    description: 'Parameters file name'
-    required: false
-    default: 'parameters.json'
   aws-region:
     description: 'AWS region for validation'
     required: false
@@ -697,8 +693,6 @@ runs:
         # Set environment variables with validation
         CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
         PARAMETERS_INPUT="${{ inputs.parameters }}"
-        PARAMETERS_FILE="${{ inputs.parameters-file }}"
-        PARAMETERS_PATH="${CLOUDFORMATION_DIR}/${PARAMETERS_FILE}"
         
         # Function to display comprehensive error examples and guidance
         show_parameter_format_help() {
@@ -1121,307 +1115,52 @@ EOF
         
         echo "::group::📋 Configuration"
         echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
-        echo "📄 Parameters File: ${PARAMETERS_FILE}"
-        echo "📍 Full Parameters Path: ${PARAMETERS_PATH}"
         echo "🔧 Parameters Input Length: ${#PARAMETERS_INPUT}"
         echo "::endgroup::"
         
-        # Function to determine parameter source and handle priority logic
-        determine_parameter_source() {
-          local parameters_input="$1"
-          local parameters_file="$2"
-          local parameters_path="$3"
-          
-          echo "🔍 Determining parameter source..." >&2
-          echo "::group::🔧 Parameter Source Priority Logic" >&2
-          echo "📋 Priority order: input > file > skip" >&2
-          echo "🔍 Parameters input length: ${#parameters_input}" >&2
-          echo "📄 Parameters file path: ${parameters_path}" >&2
-          echo "📁 Parameters file exists: $(if [[ -f "${parameters_path}" ]]; then echo "yes"; else echo "no"; fi)" >&2
-          echo "::endgroup::" >&2
-          
-          # Priority: input > file > skip
-          if [[ -n "${parameters_input}" ]]; then
-            echo "🔍 Using parameters from input (priority: input > file)" >&2
-            echo "💡 Parameters input takes precedence over parameters file" >&2
-            
-            # Parse and validate parameters input
-            local temp_file
-            if temp_file=$(parse_parameters_input "${parameters_input}"); then
-              echo "✅ Parameters input parsed successfully" >&2
-              echo "input|${temp_file}"
-              return 0
-            else
-              echo "❌ Parameters input parsing failed" >&2
-              return 1
-            fi
-            
-          elif [[ -f "${parameters_path}" ]]; then
-            echo "🔍 Using parameters from file: ${parameters_path}" >&2
-            echo "💡 No parameters input provided, falling back to parameters file" >&2
-            echo "file|${parameters_path}"
-            return 0
-            
-          else
-            echo "⏭️ No parameters provided (neither input nor file). Skipping parameters validation." >&2
-            echo "💡 To include parameters validation:" >&2
-            echo "  - Use 'parameters' input with JSON array format, or" >&2
-            echo "  - Create a parameters file at: ${parameters_path}" >&2
-            echo "skip|"
-            return 0
-          fi
-        }
-        
-        # Determine parameter source using priority logic
-        PARAMETERS_SOURCE=""
+        # Check if parameters input is provided
         PARAMETERS_DATA_FILE=""
         
-        if PARAMETER_RESULT=$(determine_parameter_source "${PARAMETERS_INPUT}" "${PARAMETERS_FILE}" "${PARAMETERS_PATH}"); then
-          # Parse the result: "source|data_file"
-          PARAMETERS_SOURCE=$(echo "${PARAMETER_RESULT}" | cut -d'|' -f1)
-          PARAMETERS_DATA_FILE=$(echo "${PARAMETER_RESULT}" | cut -d'|' -f2)
-          
-          echo "📋 Parameter source: ${PARAMETERS_SOURCE}"
+        if [[ -z "${PARAMETERS_INPUT}" ]]; then
+          echo "⏭️ No parameters provided. Skipping parameters validation."
+          echo "💡 To include parameters validation, use 'parameters' input with JSON array format"
+          echo "result=skipped" >> $GITHUB_OUTPUT
+          echo "message=No parameters provided" >> $GITHUB_OUTPUT
+          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "🔍 Using parameters from input"
+        
+        # Parse and validate parameters input
+        if PARAMETERS_DATA_FILE=$(parse_parameters_input "${PARAMETERS_INPUT}"); then
+          echo "✅ Parameters input parsed successfully"
           echo "📄 Data file: ${PARAMETERS_DATA_FILE}"
-          
-          # Handle skip case
-          if [[ "${PARAMETERS_SOURCE}" == "skip" ]]; then
-            echo "result=skipped" >> $GITHUB_OUTPUT
-            echo "message=No parameters provided" >> $GITHUB_OUTPUT
-            echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
         else
-          echo "❌ Parameter source determination failed"
+          echo "❌ Parameters input parsing failed"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=Invalid parameters input format" >> $GITHUB_OUTPUT
           echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
           exit 1
         fi
         
-        # Validate data file permissions and size (for file source only)
-        if [[ "${PARAMETERS_SOURCE}" == "file" ]]; then
-          if [[ ! -r "${PARAMETERS_DATA_FILE}" ]]; then
-            echo "::error::Parameters file is not readable: ${PARAMETERS_DATA_FILE}"
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error=Parameters file is not readable" >> $GITHUB_OUTPUT
-            echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          
-          FILE_SIZE=$(stat -f%z "${PARAMETERS_DATA_FILE}" 2>/dev/null || stat -c%s "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "0")
-          if [[ "${FILE_SIZE}" -eq 0 ]]; then
-            echo "::error::Parameters file is empty: ${PARAMETERS_DATA_FILE}"
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error=Parameters file is empty" >> $GITHUB_OUTPUT
-            echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          
-          echo "📏 Parameters file size: ${FILE_SIZE} bytes"
-        fi
+
         
         # Create output directory for parameters validation results
         mkdir -p validation-output/parameters
         
         # Log data preview for debugging
         echo "::group::📄 Parameters Data Preview"
-        if [[ "${PARAMETERS_SOURCE}" == "input" ]]; then
-          echo "📄 Input content preview (first 500 characters):"
-          echo "${PARAMETERS_INPUT}" | head -c 500 | sed 's/^/  /' || echo "  Unable to preview input"
-          if [[ ${#PARAMETERS_INPUT} -gt 500 ]]; then
-            echo "  ... (truncated)"
-          fi
-        else
-          echo "📄 File content preview (first 10 lines):"
-          head -10 "${PARAMETERS_DATA_FILE}" 2>/dev/null | sed 's/^/  /' || echo "  Unable to preview file"
+        echo "📄 Input content preview (first 500 characters):"
+        echo "${PARAMETERS_INPUT}" | head -c 500 | sed 's/^/  /' || echo "  Unable to preview input"
+        if [[ ${#PARAMETERS_INPUT} -gt 500 ]]; then
+          echo "  ... (truncated)"
         fi
         echo "::endgroup::"
         
-        # Validate JSON syntax (for file source only, input source already validated)
-        if [[ "${PARAMETERS_SOURCE}" == "file" ]]; then
-          echo "🔄 Validating JSON syntax..."
-          echo "⏱️ JSON validation started at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          
-          # Function to validate JSON with detailed error reporting
-          validate_json_syntax() {
-            local error_file="validation-output/parameters/json-syntax-errors.log"
-            
-            echo "::group::🔍 JSON Syntax Validation"
-            
-            # Clear previous error log
-            rm -f "${error_file}"
-            
-            # Test JSON syntax with jq
-            if jq empty "${PARAMETERS_DATA_FILE}" 2> "${error_file}"; then
-              echo "✅ JSON syntax is valid"
-              echo "::endgroup::"
-              return 0
-            else
-              echo "❌ JSON syntax validation failed!"
-              
-              # Analyze and report JSON errors
-              if [[ -f "${error_file}" ]]; then
-                echo "🔍 JSON Syntax Error Details:"
-                local error_content=$(cat "${error_file}")
-                echo "${error_content}"
-                
-                # Extract line and column information if available
-                local line_info=""
-                if line_info=$(echo "${error_content}" | grep -o "line [0-9]*" | head -1); then
-                  echo "📍 Error location: ${line_info}"
-                fi
-                
-                local column_info=""
-                if column_info=$(echo "${error_content}" | grep -o "column [0-9]*" | head -1); then
-                  echo "📍 Error position: ${column_info}"
-                fi
-                
-                # Extract the main error message
-                local error_message=""
-                if error_message=$(echo "${error_content}" | head -1); then
-                  echo "📄 Main error: ${error_message}"
-                  echo "::error title=Parameters JSON Syntax Error::${error_message}"
-                else
-                  echo "::error title=Parameters JSON Syntax Error::Invalid JSON syntax in parameters file"
-                fi
-                
-                # Show context around the error if line number is available
-                if [[ -n "${line_info}" ]]; then
-                  local line_num=$(echo "${line_info}" | grep -o "[0-9]*")
-                  if [[ -n "${line_num}" ]] && [[ "${line_num}" -gt 0 ]]; then
-                    echo "📄 Context around error (lines $((line_num-2)) to $((line_num+2))):"
-                    sed -n "$((line_num-2)),$((line_num+2))p" "${PARAMETERS_DATA_FILE}" 2>/dev/null | nl -ba | sed 's/^/  /' || echo "  Unable to show context"
-                  fi
-                fi
-                
-              else
-                echo "❌ No error details available"
-                echo "::error title=Parameters JSON Syntax Error::JSON syntax validation failed with no error details"
-              fi
-              
-              echo "::endgroup::"
-              return 1
-            fi
-          }
-          
-          # Execute JSON validation
-          if ! validate_json_syntax; then
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error=Invalid JSON syntax" >> $GITHUB_OUTPUT
-            echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-            echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-        else
-          echo "✅ JSON syntax already validated for input source"
-        fi
+        echo "✅ JSON syntax already validated for input source"
         
-        # Validate structure (for file source only, input source already validated)
-        if [[ "${PARAMETERS_SOURCE}" == "file" ]]; then
-          echo "🔄 Validating parameters structure..."
-          echo "⏱️ Structure validation started at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          
-          echo "::group::🔍 Structure Validation"
-          
-          # Check if the root is an array
-          echo "📋 Checking if root element is an array..."
-          if ! jq -e 'type == "array"' "${PARAMETERS_DATA_FILE}" > /dev/null 2>&1; then
-            echo "❌ Parameters file structure validation failed!"
-            echo "🔍 Structure Error: Parameters file must be a JSON array"
-            echo ""
-            echo "📖 Expected format:"
-            echo '  [{"ParameterKey": "key1", "ParameterValue": "value1"}, ...]'
-            echo ""
-            echo "📄 Current root type:"
-            local current_type=$(jq -r 'type' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-            echo "  ${current_type}"
-            
-            if [[ "${current_type}" == "object" ]]; then
-              echo "💡 Hint: Your file appears to be a JSON object. Convert it to an array format."
-              echo "📄 Current structure preview:"
-              jq -r 'keys[]' "${PARAMETERS_DATA_FILE}" 2>/dev/null | head -5 | sed 's/^/    /' || echo "    Unable to show keys"
-            fi
-            
-            echo "::error title=Parameters Structure Error::Parameters file must be a JSON array of parameter objects"
-            echo "::endgroup::"
-            
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error=Parameters file must be a JSON array" >> $GITHUB_OUTPUT
-            echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-            echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          
-          echo "✅ Root element is an array"
-          
-          # Validate each parameter object structure for file source (uses ParameterKey)
-          echo "🔄 Validating individual parameter objects..."
-          
-          local structure_errors=""
-          if structure_errors=$(jq -r '
-            to_entries[] | 
-            select(
-              (.value | type != "object") or 
-              (.value | has("ParameterKey") | not) or 
-              (.value | has("ParameterValue") | not) or
-              (.value.ParameterKey | type != "string") or
-              (.value.ParameterValue | type != "string") or
-              (.value.ParameterKey == "")
-            ) | 
-            "Parameter at index \(.key): \(
-              if (.value | type != "object") then "must be an object (currently: \(.value | type))"
-              elif (.value | has("ParameterKey") | not) then "missing required ParameterKey field"
-              elif (.value | has("ParameterValue") | not) then "missing required ParameterValue field"
-              elif (.value.ParameterKey | type != "string") then "ParameterKey must be a string (currently: \(.value.ParameterKey | type))"
-              elif (.value.ParameterValue | type != "string") then "ParameterValue must be a string (currently: \(.value.ParameterValue | type))"
-              elif (.value.ParameterKey == "") then "ParameterKey cannot be empty"
-              else "unknown structural error"
-              end
-            )"
-          ' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            
-            if [[ -n "${structure_errors}" ]]; then
-              echo "❌ Parameters file structure validation failed!"
-              echo "🔍 Structure Validation Errors:"
-              echo "${structure_errors}"
-              echo ""
-              echo "📖 Expected format for each parameter:"
-              echo '  {"ParameterKey": "string", "ParameterValue": "string"}'
-              echo ""
-              echo "📄 Example of valid parameters file:"
-              cat << 'EOF'
-[
-  {"ParameterKey": "Environment", "ParameterValue": "production"},
-  {"ParameterKey": "InstanceType", "ParameterValue": "t3.micro"}
-]
-EOF
-              
-              # Create GitHub error annotations for each structure error
-              local error_count=0
-              while IFS= read -r error_line; do
-                [[ -z "${error_line}" ]] && continue
-                echo "::error title=Parameter File Structure Error::${error_line}"
-                ((error_count++))
-              done <<< "${structure_errors}"
-              
-              echo "📊 Total structure errors: ${error_count}"
-              echo "::endgroup::"
-              
-              echo "result=failure" >> $GITHUB_OUTPUT
-              echo "error=Invalid parameter object structure (${error_count} errors)" >> $GITHUB_OUTPUT
-              echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-              echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-              exit 1
-            fi
-          fi
-          
-          echo "✅ Parameters file structure validation successful!"
-          echo "::endgroup::"
-        else
-          echo "✅ Structure already validated for input source"
-        fi
+        echo "✅ Structure already validated for input source"
         
         # Get parameter count from the data file
         PARAM_COUNT=$(jq 'length' "${PARAMETERS_DATA_FILE}")
@@ -1445,134 +1184,69 @@ EOF
         # Display parameter keys and values on successful validation
         echo "📋 Parameters Summary:"
         echo "  Total parameters: ${PARAM_COUNT}"
-        echo "  Source: ${PARAMETERS_SOURCE}"
+        echo "  Source: input"
         echo ""
         
         # Extract and display all parameters with their keys and values
-        # Handle different field names based on source
         echo "📝 Parameter Details:"
-        if [[ "${PARAMETERS_SOURCE}" == "input" ]]; then
-          # Input uses ParameterName/ParameterValue
-          if jq -r '.[] | "  🔑 \(.ParameterName): \(.ParameterValue)"' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-summary.txt 2>/dev/null; then
-            cat validation-output/parameters/parameters-summary.txt
-          else
-            echo "  ⚠️ Unable to extract parameter details"
-          fi
-          
-          # Create processed JSON for potential use by other steps
-          if jq '[.[] | {key: .ParameterName, value: .ParameterValue}]' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-processed.json 2>/dev/null; then
-            echo "📄 Processed parameters saved to validation-output/parameters/parameters-processed.json"
-          fi
-          
-          # Check for duplicate parameter keys
-          echo "🔍 Checking for duplicate parameter names..."
-          local duplicate_keys=""
-          if duplicate_keys=$(jq -r '[.[].ParameterName] | group_by(.) | map(select(length > 1)) | flatten | unique | .[]?' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            if [[ -n "${duplicate_keys}" ]]; then
-              echo ""
-              echo "⚠️ Warning: Duplicate parameter names found:"
-              local dup_count=0
-              while IFS= read -r dup_key; do
-                [[ -z "${dup_key}" ]] && continue
-                echo "  - ${dup_key}"
-                ((dup_count++))
-              done <<< "${duplicate_keys}"
-              
-              local dup_keys_list=$(echo "${duplicate_keys}" | tr '\n' ', ' | sed 's/,$//')
-              echo "::warning title=Duplicate Parameter Names::Found ${dup_count} duplicate parameter names: ${dup_keys_list}"
-            else
-              echo "✅ No duplicate parameter names found"
-            fi
-          else
-            echo "⚠️ Unable to check for duplicate names"
-          fi
-          
-          # Check for empty parameter values
-          echo "🔍 Checking for empty parameter values..."
-          local empty_values=""
-          if empty_values=$(jq -r '.[] | select(.ParameterValue == "") | .ParameterName' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            if [[ -n "${empty_values}" ]]; then
-              echo "⚠️ Warning: Parameters with empty values found:"
-              while IFS= read -r empty_key; do
-                [[ -z "${empty_key}" ]] && continue
-                echo "  - ${empty_key}"
-              done <<< "${empty_values}"
-              
-              local empty_keys_list=$(echo "${empty_values}" | tr '\n' ', ' | sed 's/,$//')
-              echo "::warning title=Empty Parameter Values::Parameters with empty values: ${empty_keys_list}"
-            else
-              echo "✅ No empty parameter values found"
-            fi
-          fi
-          
-          # Generate parameter statistics
-          echo "📊 Parameter Statistics:"
-          local avg_key_length=$(jq -r '[.[].ParameterName | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-          local avg_value_length=$(jq -r '[.[].ParameterValue | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-          echo "  Average name length: ${avg_key_length} characters"
-          echo "  Average value length: ${avg_value_length} characters"
-          
+        if jq -r '.[] | "  🔑 \(.ParameterName): \(.ParameterValue)"' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-summary.txt 2>/dev/null; then
+          cat validation-output/parameters/parameters-summary.txt
         else
-          # File uses ParameterKey/ParameterValue
-          if jq -r '.[] | "  🔑 \(.ParameterKey): \(.ParameterValue)"' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-summary.txt 2>/dev/null; then
-            cat validation-output/parameters/parameters-summary.txt
-          else
-            echo "  ⚠️ Unable to extract parameter details"
-          fi
-          
-          # Create processed JSON for potential use by other steps
-          if jq '[.[] | {key: .ParameterKey, value: .ParameterValue}]' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-processed.json 2>/dev/null; then
-            echo "📄 Processed parameters saved to validation-output/parameters/parameters-processed.json"
-          fi
-          
-          # Check for duplicate parameter keys
-          echo "🔍 Checking for duplicate parameter keys..."
-          local duplicate_keys=""
-          if duplicate_keys=$(jq -r '[.[].ParameterKey] | group_by(.) | map(select(length > 1)) | flatten | unique | .[]?' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            if [[ -n "${duplicate_keys}" ]]; then
-              echo ""
-              echo "⚠️ Warning: Duplicate parameter keys found:"
-              local dup_count=0
-              while IFS= read -r dup_key; do
-                [[ -z "${dup_key}" ]] && continue
-                echo "  - ${dup_key}"
-                ((dup_count++))
-              done <<< "${duplicate_keys}"
-              
-              local dup_keys_list=$(echo "${duplicate_keys}" | tr '\n' ', ' | sed 's/,$//')
-              echo "::warning title=Duplicate Parameter Keys::Found ${dup_count} duplicate parameter keys: ${dup_keys_list}"
-            else
-              echo "✅ No duplicate parameter keys found"
-            fi
-          else
-            echo "⚠️ Unable to check for duplicate keys"
-          fi
-          
-          # Check for empty parameter values
-          echo "🔍 Checking for empty parameter values..."
-          local empty_values=""
-          if empty_values=$(jq -r '.[] | select(.ParameterValue == "") | .ParameterKey' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            if [[ -n "${empty_values}" ]]; then
-              echo "⚠️ Warning: Parameters with empty values found:"
-              while IFS= read -r empty_key; do
-                [[ -z "${empty_key}" ]] && continue
-                echo "  - ${empty_key}"
-              done <<< "${empty_values}"
-              
-              local empty_keys_list=$(echo "${empty_values}" | tr '\n' ', ' | sed 's/,$//')
-              echo "::warning title=Empty Parameter Values::Parameters with empty values: ${empty_keys_list}"
-            else
-              echo "✅ No empty parameter values found"
-            fi
-          fi
-          
-          # Generate parameter statistics
-          echo "📊 Parameter Statistics:"
-          local avg_key_length=$(jq -r '[.[].ParameterKey | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-          local avg_value_length=$(jq -r '[.[].ParameterValue | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-          echo "  Average key length: ${avg_key_length} characters"
-          echo "  Average value length: ${avg_value_length} characters"
+          echo "  ⚠️ Unable to extract parameter details"
         fi
+        
+        # Create processed JSON for potential use by other steps
+        if jq '[.[] | {key: .ParameterName, value: .ParameterValue}]' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-processed.json 2>/dev/null; then
+          echo "📄 Processed parameters saved to validation-output/parameters/parameters-processed.json"
+        fi
+        
+        # Check for duplicate parameter keys
+        echo "🔍 Checking for duplicate parameter names..."
+        local duplicate_keys=""
+        if duplicate_keys=$(jq -r '[.[].ParameterName] | group_by(.) | map(select(length > 1)) | flatten | unique | .[]?' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
+          if [[ -n "${duplicate_keys}" ]]; then
+            echo ""
+            echo "⚠️ Warning: Duplicate parameter names found:"
+            local dup_count=0
+            while IFS= read -r dup_key; do
+              [[ -z "${dup_key}" ]] && continue
+              echo "  - ${dup_key}"
+              ((dup_count++))
+            done <<< "${duplicate_keys}"
+            
+            local dup_keys_list=$(echo "${duplicate_keys}" | tr '\n' ', ' | sed 's/,$//')
+            echo "::warning title=Duplicate Parameter Names::Found ${dup_count} duplicate parameter names: ${dup_keys_list}"
+          else
+            echo "✅ No duplicate parameter names found"
+          fi
+        else
+          echo "⚠️ Unable to check for duplicate names"
+        fi
+        
+        # Check for empty parameter values
+        echo "🔍 Checking for empty parameter values..."
+        local empty_values=""
+        if empty_values=$(jq -r '.[] | select(.ParameterValue == "") | .ParameterName' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
+          if [[ -n "${empty_values}" ]]; then
+            echo "⚠️ Warning: Parameters with empty values found:"
+            while IFS= read -r empty_key; do
+              [[ -z "${empty_key}" ]] && continue
+              echo "  - ${empty_key}"
+            done <<< "${empty_values}"
+            
+            local empty_keys_list=$(echo "${empty_values}" | tr '\n' ', ' | sed 's/,$//')
+            echo "::warning title=Empty Parameter Values::Parameters with empty values: ${empty_keys_list}"
+          else
+            echo "✅ No empty parameter values found"
+          fi
+        fi
+        
+        # Generate parameter statistics
+        echo "📊 Parameter Statistics:"
+        local avg_key_length=$(jq -r '[.[].ParameterName | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
+        local avg_value_length=$(jq -r '[.[].ParameterValue | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
+        echo "  Average name length: ${avg_key_length} characters"
+        echo "  Average value length: ${avg_value_length} characters"
         
         echo "::endgroup::"
         
@@ -1582,24 +1256,15 @@ EOF
         echo "result=success" >> $GITHUB_OUTPUT
         echo "parameters-count=${PARAM_COUNT}" >> $GITHUB_OUTPUT
         echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-        echo "message=${PARAM_COUNT} parameters validated successfully from ${PARAMETERS_SOURCE}" >> $GITHUB_OUTPUT
+        echo "message=${PARAM_COUNT} parameters validated successfully from input" >> $GITHUB_OUTPUT
         echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
         
         # Export parameter keys for potential use in summary
-        # Handle different field names based on source
         local param_keys=""
-        if [[ "${PARAMETERS_SOURCE}" == "input" ]]; then
-          if param_keys=$(jq -r '[.[].ParameterName] | join(", ")' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            echo "parameter-keys=${param_keys}" >> $GITHUB_OUTPUT
-          else
-            echo "parameter-keys=" >> $GITHUB_OUTPUT
-          fi
+        if param_keys=$(jq -r '[.[].ParameterName] | join(", ")' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
+          echo "parameter-keys=${param_keys}" >> $GITHUB_OUTPUT
         else
-          if param_keys=$(jq -r '[.[].ParameterKey] | join(", ")' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-            echo "parameter-keys=${param_keys}" >> $GITHUB_OUTPUT
-          else
-            echo "parameter-keys=" >> $GITHUB_OUTPUT
-          fi
+          echo "parameter-keys=" >> $GITHUB_OUTPUT
         fi
 
     - name: Generate validation summary
@@ -1865,7 +1530,6 @@ EOF
         |---|---|
         | **CloudFormation Directory** | \`${{ inputs.cloudformation-dir }}\` |
         | **Template File** | \`${{ inputs.template-file }}\` |
-        | **Parameters File** | \`${{ inputs.parameters-file }}\` |
         | **AWS Region** | \`${{ inputs.aws-region }}\` |
         | **AWS Role ARN** | \`${{ inputs.aws-role-arn }}\` |
 

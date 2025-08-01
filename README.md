@@ -10,7 +10,7 @@ A comprehensive GitHub Action that validates CloudFormation templates, nested te
 
 - **Main Template Validation**: Validates CloudFormation template syntax using AWS CloudFormation API
 - **Nested Templates Support**: Automatically discovers and validates templates in `nested-templates` directory
-- **Parameters File Validation**: Validates JSON structure and syntax of CloudFormation parameters files
+- **Parameters Input Validation**: Validates JSON structure and syntax of CloudFormation parameters provided as input
 - **Comprehensive Error Reporting**: Detailed error messages with categorization and troubleshooting suggestions
 - **Validation Artifacts**: Uploads validation results and logs as GitHub artifacts for debugging
 - **Step Summary**: Generates markdown summary with validation status for each component
@@ -25,7 +25,6 @@ A comprehensive GitHub Action that validates CloudFormation templates, nested te
 |------|-------------|----------|---------|
 | `cloudformation-dir` | Directory containing CloudFormation templates | No | `.` |
 | `template-file` | Main CloudFormation template filename | No | `template.yaml` |
-| `parameters-file` | Parameters file name | No | `parameters.json` |
 | `parameters` | CloudFormation parameters as JSON array string | No | `''` |
 | `aws-region` | AWS region for validation | No | `us-east-1` |
 | `aws-role-arn` | AWS IAM role ARN for authentication | **Yes** | — |
@@ -89,7 +88,17 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'cloudformation'
           template-file: 'main-template.yaml'
-          parameters-file: 'parameters.json'
+          parameters: |
+            [
+              {
+                "ParameterName": "Environment",
+                "ParameterValue": "production"
+              },
+              {
+                "ParameterName": "BucketName",
+                "ParameterValue": "my-cloudformation-bucket"
+              }
+            ]
           aws-region: 'us-west-2'
 ```
 
@@ -141,7 +150,17 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: ${{ matrix.template-dir }}
           template-file: 'template.yaml'
-          parameters-file: '${{ matrix.environment }}-parameters.json'
+          parameters: |
+            [
+              {
+                "ParameterName": "Environment",
+                "ParameterValue": "${{ matrix.environment }}"
+              },
+              {
+                "ParameterName": "Region",
+                "ParameterValue": "${{ matrix.aws-region }}"
+              }
+            ]
           aws-region: ${{ matrix.aws-region }}
 ```
 
@@ -181,7 +200,17 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'templates'
           template-file: ${{ github.event.inputs.template-name }}
-          parameters-file: 'custom-params.json'
+          parameters: |
+            [
+              {
+                "ParameterName": "Environment",
+                "ParameterValue": "custom"
+              },
+              {
+                "ParameterName": "TemplateName",
+                "ParameterValue": "${{ github.event.inputs.template-name }}"
+              }
+            ]
           aws-region: 'ap-southeast-2'
 ```
 
@@ -284,16 +313,12 @@ jobs:
           aws-region: 'us-west-2'
 ```
 
-## Parameter Input Methods
+## Parameter Input
 
-This action supports two methods for providing CloudFormation parameters:
-
-### Method 1: Direct Parameter Input (Recommended)
-
-Use the `parameters` input to provide parameters directly as a JSON array:
+This action requires CloudFormation parameters to be provided directly as a JSON array using the `parameters` input:
 
 ```yaml
-- name: Validate with Direct Parameters
+- name: Validate with Parameters
   uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
   with:
     parameters: |
@@ -315,38 +340,11 @@ Use the `parameters` input to provide parameters directly as a JSON array:
 - Better integration with CI/CD pipelines
 - Easier parameter management in workflows
 
-### Method 2: Parameter File (Legacy)
+## Migration from Previous Versions
 
-Use the `parameters-file` input to specify a JSON file containing parameters:
+If you were using a previous version that supported `parameters-file`, you need to migrate to the new `parameters` input format:
 
-```yaml
-- name: Validate with Parameter File
-  uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
-  with:
-    parameters-file: 'parameters.json'
-```
-
-**Parameter File Format:**
-```json
-[
-  {
-    "ParameterKey": "Environment",
-    "ParameterValue": "production"
-  },
-  {
-    "ParameterKey": "BucketName",
-    "ParameterValue": "my-bucket-name"
-  }
-]
-```
-
-### Parameter Priority
-
-When both `parameters` and `parameters-file` are provided, the direct `parameters` input takes precedence and the file is ignored.
-
-## Migration from File-Based to Direct Parameters
-
-### Before (File-Based)
+### Before (parameters-file - no longer supported)
 
 **parameters.json:**
 ```json
@@ -358,10 +356,6 @@ When both `parameters` and `parameters-file` are provided, the direct `parameter
   {
     "ParameterKey": "BucketName",
     "ParameterValue": "my-cloudformation-bucket"
-  },
-  {
-    "ParameterKey": "EnableLogging",
-    "ParameterValue": "true"
   }
 ]
 ```
@@ -369,18 +363,18 @@ When both `parameters` and `parameters-file` are provided, the direct `parameter
 **Workflow:**
 ```yaml
 - name: Validate CloudFormation
-  uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
+  uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
   with:
     aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
     parameters-file: 'parameters.json'
 ```
 
-### After (Direct Input)
+### After (parameters input - required)
 
 **Workflow:**
 ```yaml
 - name: Validate CloudFormation
-  uses: subhamay-bhattacharyya-gha/cfn-validate-action@main
+  uses: subhamay-bhattacharyya-gha/cfn-validate-action@v1
   with:
     aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
     parameters: |
@@ -392,18 +386,14 @@ When both `parameters` and `parameters-file` are provided, the direct `parameter
         {
           "ParameterName": "BucketName",
           "ParameterValue": "my-cloudformation-bucket"
-        },
-        {
-          "ParameterName": "EnableLogging",
-          "ParameterValue": "true"
         }
       ]
 ```
 
 **Key Changes:**
-- `ParameterKey` becomes `ParameterName`
+- `ParameterKey` becomes `ParameterName` 
+- `parameters-file` input has been removed
 - Parameters are defined directly in the workflow
-- No separate parameter file needed
 - Can use dynamic values from secrets, variables, or expressions
 
 ---
@@ -415,10 +405,9 @@ When both `parameters` and `parameters-file` are provided, the direct `parameter
 ```
 repository/
 ├── template.yaml          # Main CloudFormation template
-├── parameters.json        # Parameters file
 └── .github/
     └── workflows/
-        └── validate.yml   # Validation workflow
+        └── validate.yml   # Validation workflow (parameters defined inline)
 ```
 
 ### Complex Project Structure
@@ -427,18 +416,13 @@ repository/
 repository/
 ├── infrastructure/
 │   ├── template.yaml              # Main template
-│   ├── parameters.json            # Parameters
-│   ├── nested-templates/          # Nested templates directory
-│   │   ├── vpc.yaml              # VPC nested template
-│   │   ├── security-groups.yaml  # Security groups template
-│   │   └── database.yaml         # Database template
-│   └── environments/
-│       ├── dev-parameters.json
-│       ├── staging-parameters.json
-│       └── prod-parameters.json
+│   └── nested-templates/          # Nested templates directory
+│       ├── vpc.yaml              # VPC nested template
+│       ├── security-groups.yaml  # Security groups template
+│       └── database.yaml         # Database template
 └── .github/
     └── workflows/
-        └── validate-infrastructure.yml
+        └── validate-infrastructure.yml  # Parameters defined inline per environment
 ```
 
 ### Multi-Environment Project Structure
@@ -448,22 +432,19 @@ repository/
 ├── environments/
 │   ├── dev/
 │   │   ├── template.yaml
-│   │   ├── parameters.json
 │   │   └── nested-templates/
 │   │       └── dev-specific.yaml
 │   ├── staging/
 │   │   ├── template.yaml
-│   │   ├── parameters.json
 │   │   └── nested-templates/
 │   │       └── staging-specific.yaml
 │   └── prod/
 │       ├── template.yaml
-│       ├── parameters.json
 │       └── nested-templates/
 │           └── prod-specific.yaml
 └── .github/
     └── workflows/
-        └── validate-all-environments.yml
+        └── validate-all-environments.yml  # Parameters defined inline per environment
 ```
 
 ---
@@ -544,21 +525,7 @@ For GitHub Actions OIDC integration, ensure your IAM role has a trust policy sim
 - Ensure resource types and properties are valid
 - Check for proper indentation in YAML files
 
-#### Parameters File Errors
-**Error**: `Invalid JSON syntax` or `Invalid structure`
 
-**Solutions**:
-- Validate JSON syntax using a JSON validator
-- Ensure parameters file follows the correct structure:
-  ```json
-  [
-    {
-      "ParameterKey": "string",
-      "ParameterValue": "string"
-    }
-  ]
-  ```
-- Check that all parameter keys match those defined in the template
 
 #### Parameter Input Errors
 **Error**: `Invalid parameters JSON format` or `Invalid parameter structure`
@@ -592,12 +559,7 @@ For GitHub Actions OIDC integration, ensure your IAM role has a trust policy sim
 - Remove any parameter objects with empty or null parameter names
 - Check for whitespace-only parameter names
 
-**Error**: `Parameters input takes precedence over parameters-file`
 
-**Solutions**:
-- This is an informational message, not an error
-- If you want to use the parameter file, remove the `parameters` input
-- If you want to use direct parameters, you can remove the `parameters-file` input
 
 #### Nested Templates Issues
 **Error**: Individual nested template validation failures
