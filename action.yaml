@@ -61,9 +61,17 @@ runs:
 
         TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
         TEMPLATE_FILE="${{ inputs.template-file }}"
-        FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
 
-        if [[ -z "$TEMPLATE_DIR" || ! -d "$TEMPLATE_DIR" ]]; then
+        # Use template-file directly if it includes a slash or is absolute
+        if [[ "$TEMPLATE_FILE" = /* || "$TEMPLATE_FILE" == *"/"* ]]; then
+          FULL_TEMPLATE_PATH="$TEMPLATE_FILE"
+        else
+          FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
+        fi
+
+        echo "📁 Resolved template path: $FULL_TEMPLATE_PATH"
+
+        if [[ ! -d "$TEMPLATE_DIR" ]]; then
           echo "::error::CloudFormation directory not found: $TEMPLATE_DIR"
           echo "result=failure" >> "$GITHUB_OUTPUT"
           exit 1
@@ -98,11 +106,12 @@ runs:
         fi
 
         echo "✅ Template file found: $FULL_TEMPLATE_PATH"
-        echo "📏 Template file size: ${FILE_SIZE} bytes (within allowed limit)"
+        echo "📏 Template file size: ${FILE_SIZE} bytes"
 
         echo "::group::📄 Template File Preview (first 10 lines)"
         head -10 "$FULL_TEMPLATE_PATH" || echo "Unable to preview template"
         echo "::endgroup::"
+
 
 
     - name: Validate the CloudFormation template
