@@ -58,9 +58,8 @@ runs:
 
     - name: Validate CloudFormation directory and template
       id: validate-directory-template
-      shell: bash:
+      shell: bash
       run: |
-        
         echo "🔍 Validating CloudFormation template: ${TEMPLATE_PATH}"
         
         # Validate input parameters
