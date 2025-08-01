@@ -34,7 +34,6 @@ outputs:
   validation-result:
     description: 'Overall validation result (success/failure)'
     value: ${{ steps.summary.outputs.validation-result }}
-  parameters-result:
 
 runs:
   using: 'composite'
@@ -61,12 +60,6 @@ runs:
       id: validate-directory-template
       shell: bash:
       run: |
-
-        # echo "::group::📋 Configuration"
-        # echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
-        # echo "📄 Template File: ${TEMPLATE_FILE}"
-        # echo "📍 Full Template Path: ${TEMPLATE_PATH}"
-        # echo "::endgroup::"
         
         echo "🔍 Validating CloudFormation template: ${TEMPLATE_PATH}"
         
