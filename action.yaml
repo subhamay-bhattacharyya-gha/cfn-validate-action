@@ -60,7 +60,7 @@ runs:
       id: validate-directory-template
       shell: bash
       run: |
-        echo "🔍 Validating CloudFormation template: ${TEMPLATE_PATH}"
+        echo "🔍 Validating CloudFormation template: ${{ inputs.template-file}}"
         
         # Validate input parameters
         if [[ -z "${{ inputs.cloudformation-dir }}" ]]; then
