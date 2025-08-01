@@ -714,13 +714,13 @@ runs:
           echo ""
           echo "Multiple parameters:"
           cat << 'EOF'
-[
-  {"ParameterName": "Environment", "ParameterValue": "production"},
-  {"ParameterName": "InstanceType", "ParameterValue": "t3.micro"},
-  {"ParameterName": "KeyName", "ParameterValue": "my-key-pair"},
-  {"ParameterName": "VpcId", "ParameterValue": "vpc-12345678"}
-]
-EOF
+            [
+              {"ParameterName": "Environment", "ParameterValue": "production"},
+              {"ParameterName": "InstanceType", "ParameterValue": "t3.micro"},
+              {"ParameterName": "KeyName", "ParameterValue": "my-key-pair"},
+              {"ParameterName": "VpcId", "ParameterValue": "vpc-12345678"}
+            ]
+            EOF
           echo ""
           
           case "${error_context}" in
@@ -831,12 +831,12 @@ EOF
             echo ""
             echo "📄 YAML multiline example:"
             cat << 'EOF'
-parameters: |
-  [
-    {"ParameterName": "Environment", "ParameterValue": "production"},
-    {"ParameterName": "InstanceType", "ParameterValue": "t3.micro"}
-  ]
-EOF
+              parameters: |
+                [
+                  {"ParameterName": "Environment", "ParameterValue": "production"},
+                  {"ParameterName": "InstanceType", "ParameterValue": "t3.micro"}
+                ]
+              EOF
           fi
           
           # Validate JSON syntax
@@ -1052,11 +1052,11 @@ EOF
               echo ""
               echo "📄 Example of corrected parameters:"
               cat << 'EOF'
-[
-  {"ParameterName": "Environment", "ParameterValue": "production"},
-  {"ParameterName": "EnvironmentType", "ParameterValue": "prod"}
-]
-EOF
+                [
+                  {"ParameterName": "Environment", "ParameterValue": "production"},
+                  {"ParameterName": "EnvironmentType", "ParameterValue": "prod"}
+                ]
+                EOF
               
               local dup_names_list=$(echo "${duplicate_names}" | tr '\n' ', ' | sed 's/,$//')
               echo "::error title=Duplicate Parameter Names::Found ${dup_count} duplicate parameter names: ${dup_names_list}"
