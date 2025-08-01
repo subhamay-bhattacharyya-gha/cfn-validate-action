@@ -80,7 +80,7 @@ runs:
         fi
         
         # Check if CloudFormation directory exists
-        if [[ ! -d "${{ inputs.cloudformation-dir }}" ]]; then
+        if [[ ! -d "${{ github.workspace }}/${{ inputs.cloudformation-dir }}" ]]; then
           echo "::error::CloudFormation directory does not exist: ${{ inputs.cloudformation-dir }}"
           echo "📁 Current directory contents:"
           ls -la . || echo "Unable to list current directory"
@@ -90,9 +90,9 @@ runs:
         fi
         
         # Check if template file exists
-        if [[ ! -f "${{ inputs.template-file }}" ]]; then
+        if [[ ! -f "${{ github.workspace }}/${{ inputs.template-file }}" ]]; then
           echo "::error::Template file not found: ${{ inputs.template-file }}"
-          echo "📁 Available files in ${CLOUDFORMATION_DIR}:"
+          echo "📁 Available files in ${{ inputs.cloudformation-dir }}:"
           ls -la "${{ inputs.cloudformation-dir }}" 2>&1 || echo "Unable to list directory contents"
           
           echo "result=failure" >> $GITHUB_OUTPUT
@@ -139,11 +139,11 @@ runs:
                 | jq 'map({ (."ParameterName"): ."ParameterValue" }) | add')
         echo "Input JSON : $INPUT_JSON"
 
-        echo "Template file : ${{ inputs.template-file }}"
+        echo "Template file : ${{ github.workspace }}/${{ inputs.template-file }}"
 
         mkdir -p ${{ inputs.cloudformation-dir }}/validation-output
         aws cloudformation validate-template \
-              --template-body "file://${{ inputs.template-file }}" \
+              --template-body "file://${{ github.workspace }}/${{ inputs.template-file }}" \
               --region "${{ inputs.aws-region }}" \
               --cli-input-json $INPUT_JSON \
               --output json > \ 
