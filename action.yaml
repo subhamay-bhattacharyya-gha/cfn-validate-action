@@ -41,7 +41,7 @@ runs:
     - name: Print Inputs for Debugging
       id: print-inputs
       shell: bash
-      working-dir: ${{ github.workspace }}
+      working-directory: ${{ github.workspace }}
       run: |
         set -euo pipefail
         
@@ -60,7 +60,7 @@ runs:
     - name: Validate CloudFormation directory and template
       id: validate-directory-template
       shell: bash
-      working-dir: ${{ github.workspace }}
+      working-directory: ${{ github.workspace }}
       run: |
         echo "🔍 Validating CloudFormation template: ${{ inputs.template-file}}"
         
