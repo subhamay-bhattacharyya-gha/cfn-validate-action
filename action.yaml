@@ -123,7 +123,14 @@ runs:
 
         TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
         TEMPLATE_FILE="${{ inputs.template-file }}"
-        FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
+
+        # Use template-file directly if it includes a slash or is absolute
+        if [[ "$TEMPLATE_FILE" = /* || "$TEMPLATE_FILE" == *"/"* ]]; then
+          FULL_TEMPLATE_PATH="$TEMPLATE_FILE"
+        else
+          FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
+        fi
+        
         OUTPUT_DIR="${TEMPLATE_DIR}/validation-output"
 
         mkdir -p "$OUTPUT_DIR"
