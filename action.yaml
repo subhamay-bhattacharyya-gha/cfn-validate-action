@@ -128,8 +128,16 @@ runs:
         head -10 "${{ github.workspace }}/${{ inputs.template-file }}" 2>/dev/null || echo "Unable to preview template file"
         echo "::endgroup::"
 
-
-
+    - name: Validate the CloudFormation template
+      id: validate-cloudformation-template
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        INPUT_JSON=$(echo "$INPUT_STRING" \
+                | sed -E 's/([{,])([a-zA-Z0-9_]+):/\1"\2":/g' \
+                | sed -E 's/:([a-zA-Z0-9_\-]+)/:"\1"/g' \
+                | jq 'map({ (."ParameterName"): ."ParameterValue" }) | add')
+        echo "Input JSON : $INPUT_JSON"
 
 
     #   env:
