@@ -34,62 +34,51 @@ outputs:
   validation-result:
     description: 'Overall validation result (success/failure)'
     value: ${{ steps.summary.outputs.validation-result }}
-  main-template-result:
-    description: 'Main template validation result (success/failure)'
-    value: ${{ steps.main-validation.outputs.result }}
-  nested-templates-result:
-    description: 'Nested templates validation result (success/failure/skipped)'
-    value: ${{ steps.nested-validation.outputs.result }}
   parameters-result:
-    description: 'Parameters file validation result (success/failure/skipped)'
-    value: ${{ steps.parameters-validation.outputs.result }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Validate main CloudFormation template
-      id: main-validation
+    - name: Print Inputs for Debugging
+      id: print-inputs
       shell: bash
-      env:
-        # AWS CLI configuration for retries and timeouts
-        AWS_MAX_ATTEMPTS: 3
-        AWS_RETRY_MODE: adaptive
-        AWS_CLI_READ_TIMEOUT: 300
-        AWS_CLI_CONNECT_TIMEOUT: 60
       run: |
         set -euo pipefail
         
         # Enable detailed logging
         echo "::group::🔧 Debug Information"
-        echo "🔍 Starting main CloudFormation template validation"
-        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "🌍 AWS Region: ${{ inputs.aws-region }}"
-        echo "🔑 AWS CLI Version: $(aws --version 2>&1 || echo 'AWS CLI not available')"
-        echo "📁 Working Directory: $(pwd)"
+        echo "🔍 Starting CloudFormation template validation"
+        echo "📅 Timestamp                : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "📁 Working Directory        : $(pwd)"
+        echo "📁 CloudFormation Directory : ${{ inputs.cloudformation-dir }}"
+        echo "📁 Template file            : ${{ inputs.template-file}}"
+        echo "📁 Parameters               : ${{ inputs.parameters }}"
+        echo "🌍 AWS Region               : ${{ inputs.aws-region }}"
+        echo "🔑 AWS CLI Version          : $(aws --version 2>&1 || echo 'AWS CLI not available')"
         echo "::endgroup::"
-        
-        # Set environment variables with validation
-        CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
-        TEMPLATE_FILE="${{ inputs.template-file }}"
-        TEMPLATE_PATH="${{ github.workspace }}/${TEMPLATE_FILE}"
-        
-        echo "::group::📋 Configuration"
-        echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
-        echo "📄 Template File: ${TEMPLATE_FILE}"
-        echo "📍 Full Template Path: ${TEMPLATE_PATH}"
-        echo "::endgroup::"
+
+    - name: Validate CloudFormation directory and template
+      id: validate-directory-template
+      shell: bash:
+      run: |
+
+        # echo "::group::📋 Configuration"
+        # echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
+        # echo "📄 Template File: ${TEMPLATE_FILE}"
+        # echo "📍 Full Template Path: ${TEMPLATE_PATH}"
+        # echo "::endgroup::"
         
         echo "🔍 Validating CloudFormation template: ${TEMPLATE_PATH}"
         
         # Validate input parameters
-        if [[ -z "${CLOUDFORMATION_DIR}" ]]; then
+        if [[ -z "${{ inputs.cloudformation-dir }}" ]]; then
           echo "::error::CloudFormation directory is empty or not specified"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=CloudFormation directory is empty" >> $GITHUB_OUTPUT
           exit 1
         fi
         
-        if [[ -z "${TEMPLATE_FILE}" ]]; then
+        if [[ -z "${{ inputs.template-file}}" ]]; then
           echo "::error::Template file name is empty or not specified"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=Template file name is empty" >> $GITHUB_OUTPUT
@@ -97,43 +86,39 @@ runs:
         fi
         
         # Check if CloudFormation directory exists
-        if [[ ! -d "${CLOUDFORMATION_DIR}" ]]; then
-          echo "::error::CloudFormation directory does not exist: ${CLOUDFORMATION_DIR}"
+        if [[ ! -d "${{ inputs.cloudformation-dir }}" ]]; then
+          echo "::error::CloudFormation directory does not exist: ${{ inputs.cloudformation-dir }}"
           echo "📁 Current directory contents:"
           ls -la . || echo "Unable to list current directory"
           echo "result=failure" >> $GITHUB_OUTPUT
-          echo "error=CloudFormation directory not found: ${CLOUDFORMATION_DIR}" >> $GITHUB_OUTPUT
+          echo "error=CloudFormation directory not found: ${{ inputs.cloudformation-dir }}" >> $GITHUB_OUTPUT
           exit 1
         fi
         
         # Check if template file exists
-        if [[ ! -f "${TEMPLATE_PATH}" ]]; then
-          echo "::error::Template file not found: ${TEMPLATE_PATH}"
+        if [[ ! -f "${{ inputs.template-file }}" ]]; then
+          echo "::error::Template file not found: ${{ inputs.template-file }}"
           echo "📁 Available files in ${CLOUDFORMATION_DIR}:"
-          ls -la "${CLOUDFORMATION_DIR}" 2>&1 || echo "Unable to list directory contents"
-          
-          # Try to find similar files
-          echo "🔍 Looking for similar template files..."
-          find "${CLOUDFORMATION_DIR}" -maxdepth 2 -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) 2>/dev/null | head -10 || echo "No template files found"
+          ls -la "${{ inputs.cloudformation-dir }}" 2>&1 || echo "Unable to list directory contents"
           
           echo "result=failure" >> $GITHUB_OUTPUT
-          echo "error=Template file not found: ${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
+          echo "error=Template file not found: ${{ inputs.template-file }}" >> $GITHUB_OUTPUT
           exit 1
         fi
         
-        echo "✅ Template file found: ${TEMPLATE_PATH}"
+        echo "✅ Template file found: ${{ inputs.template-file }}"
         
         # Validate file is readable and not empty
-        if [[ ! -r "${TEMPLATE_PATH}" ]]; then
-          echo "::error::Template file is not readable: ${TEMPLATE_PATH}"
+        if [[ ! -r "${{ inputs.template-file }}}" ]]; then
+          echo "::error::Template file is not readable: ${{ inputs.template-file }}"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=Template file is not readable" >> $GITHUB_OUTPUT
           exit 1
         fi
         
-        FILE_SIZE=$(stat -f%z "${TEMPLATE_PATH}" 2>/dev/null || stat -c%s "${TEMPLATE_PATH}" 2>/dev/null || echo "0")
+        FILE_SIZE=$(stat -f%z "${{ inputs.template-file }}" 2>/dev/null || stat -c%s "$${{ inputs.template-file }}" 2>/dev/null || echo "0")
         if [[ "${FILE_SIZE}" -eq 0 ]]; then
-          echo "::error::Template file is empty: ${TEMPLATE_PATH}"
+          echo "::error::Template file is empty: ${{ inputs.template-file }}"
           echo "result=failure" >> $GITHUB_OUTPUT
           echo "error=Template file is empty" >> $GITHUB_OUTPUT
           exit 1
@@ -146,1536 +131,608 @@ runs:
         
         # Log template file preview for debugging
         echo "::group::📄 Template File Preview (first 10 lines)"
-        head -10 "${TEMPLATE_PATH}" 2>/dev/null || echo "Unable to preview template file"
+        head -10 "${{ inputs.template-file }}" 2>/dev/null || echo "Unable to preview template file"
         echo "::endgroup::"
+
+
+
+
+
+    #   env:
+    #     # AWS CLI configuration for retries and timeouts
+    #     AWS_MAX_ATTEMPTS: 3
+    #     AWS_RETRY_MODE: adaptive
+    #     AWS_CLI_READ_TIMEOUT: 300
+    #     AWS_CLI_CONNECT_TIMEOUT: 60
+    #   run: |
+
         
-        # Validate template using AWS CLI with comprehensive error handling
-        echo "🔄 Running AWS CloudFormation template validation..."
-        echo "⏱️ Validation started at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     # Set environment variables with validation
+    #     CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
+    #     TEMPLATE_FILE="${{ inputs.template-file }}"
+    #     TEMPLATE_PATH="${{ github.workspace }}/${TEMPLATE_FILE}"
         
-        # Function to perform AWS CLI validation with retry logic
-        validate_template_with_retry() {
-          local attempt=1
-          local max_attempts=3
-          local retry_delay=5
+
+        
+    #     # Validate template using AWS CLI with comprehensive error handling
+    #     echo "🔄 Running AWS CloudFormation template validation..."
+    #     echo "⏱️ Validation started at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        
+    #     # Function to perform AWS CLI validation with retry logic
+    #     validate_template_with_retry() {
+    #       local attempt=1
+    #       local max_attempts=3
+    #       local retry_delay=5
           
-          while [[ $attempt -le $max_attempts ]]; do
-            echo "🔄 Validation attempt ${attempt}/${max_attempts}"
+    #       while [[ $attempt -le $max_attempts ]]; do
+    #         echo "🔄 Validation attempt ${attempt}/${max_attempts}"
             
-            # Set timeout for the AWS CLI command
-            if timeout 300 aws cloudformation validate-template \
-              --template-body "file://${TEMPLATE_PATH}" \
-              --region "${{ inputs.aws-region }}" \
-              --output json > validation-output/main-template-validation.json 2> validation-output/main-template-errors.log; then
+    #         # Set timeout for the AWS CLI command
+    #         if timeout 300 aws cloudformation validate-template \
+    #           --template-body "file://${TEMPLATE_PATH}" \
+    #           --region "${{ inputs.aws-region }}" \
+    #           --output json > validation-output/main-template-validation.json 2> validation-output/main-template-errors.log; then
               
-              echo "✅ Template validation successful on attempt ${attempt}!"
-              return 0
-            else
-              local exit_code=$?
-              echo "❌ Validation attempt ${attempt} failed with exit code: ${exit_code}"
+    #           echo "✅ Template validation successful on attempt ${attempt}!"
+    #           return 0
+    #         else
+    #           local exit_code=$?
+    #           echo "❌ Validation attempt ${attempt} failed with exit code: ${exit_code}"
               
-              # Log error details for this attempt
-              if [[ -f validation-output/main-template-errors.log ]]; then
-                echo "::group::🔍 Error details for attempt ${attempt}"
-                cat validation-output/main-template-errors.log
-                echo "::endgroup::"
+    #           # Log error details for this attempt
+    #           if [[ -f validation-output/main-template-errors.log ]]; then
+    #             echo "::group::🔍 Error details for attempt ${attempt}"
+    #             cat validation-output/main-template-errors.log
+    #             echo "::endgroup::"
                 
-                # Check for specific error types that shouldn't be retried
-                if grep -q "ValidationError" validation-output/main-template-errors.log; then
-                  echo "🚫 Template syntax error detected - not retrying"
-                  return $exit_code
-                fi
+    #             # Check for specific error types that shouldn't be retried
+    #             if grep -q "ValidationError" validation-output/main-template-errors.log; then
+    #               echo "🚫 Template syntax error detected - not retrying"
+    #               return $exit_code
+    #             fi
                 
-                if grep -q "AccessDenied\|UnauthorizedOperation\|InvalidUserID.NotFound" validation-output/main-template-errors.log; then
-                  echo "🚫 Authentication/authorization error detected - not retrying"
-                  return $exit_code
-                fi
-              fi
+    #             if grep -q "AccessDenied\|UnauthorizedOperation\|InvalidUserID.NotFound" validation-output/main-template-errors.log; then
+    #               echo "🚫 Authentication/authorization error detected - not retrying"
+    #               return $exit_code
+    #             fi
+    #           fi
               
-              if [[ $attempt -lt $max_attempts ]]; then
-                echo "⏳ Waiting ${retry_delay} seconds before retry..."
-                sleep $retry_delay
-                retry_delay=$((retry_delay * 2))  # Exponential backoff
-              fi
+    #           if [[ $attempt -lt $max_attempts ]]; then
+    #             echo "⏳ Waiting ${retry_delay} seconds before retry..."
+    #             sleep $retry_delay
+    #             retry_delay=$((retry_delay * 2))  # Exponential backoff
+    #           fi
               
-              attempt=$((attempt + 1))
-            fi
-          done
+    #           attempt=$((attempt + 1))
+    #         fi
+    #       done
           
-          echo "❌ All validation attempts failed"
-          return 1
-        }
+    #       echo "❌ All validation attempts failed"
+    #       return 1
+    #     }
         
-        # Execute validation with retry logic
-        if validate_template_with_retry; then
-          echo "⏱️ Validation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     # Execute validation with retry logic
+    #     if validate_template_with_retry; then
+    #       echo "⏱️ Validation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           
-          # Validate that the output file was created and is valid JSON
-          if [[ ! -f validation-output/main-template-validation.json ]]; then
-            echo "::error::Validation output file was not created"
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error=Validation output file missing" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+    #       # Validate that the output file was created and is valid JSON
+    #       if [[ ! -f validation-output/main-template-validation.json ]]; then
+    #         echo "::error::Validation output file was not created"
+    #         echo "result=failure" >> $GITHUB_OUTPUT
+    #         echo "error=Validation output file missing" >> $GITHUB_OUTPUT
+    #         exit 1
+    #       fi
           
-          # Validate JSON output
-          if ! jq empty validation-output/main-template-validation.json 2>/dev/null; then
-            echo "::error::Validation output is not valid JSON"
-            echo "🔍 Raw output content:"
-            cat validation-output/main-template-validation.json 2>/dev/null || echo "Unable to read output file"
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error=Invalid JSON in validation output" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+    #       # Validate JSON output
+    #       if ! jq empty validation-output/main-template-validation.json 2>/dev/null; then
+    #         echo "::error::Validation output is not valid JSON"
+    #         echo "🔍 Raw output content:"
+    #         cat validation-output/main-template-validation.json 2>/dev/null || echo "Unable to read output file"
+    #         echo "result=failure" >> $GITHUB_OUTPUT
+    #         echo "error=Invalid JSON in validation output" >> $GITHUB_OUTPUT
+    #         exit 1
+    #       fi
           
-          # Display template capabilities and parameters using jq
-          echo "::group::📋 Template Details"
+    #       # Display template capabilities and parameters using jq
+    #       echo "::group::📋 Template Details"
           
-          # Extract and display description
-          DESCRIPTION=$(jq -r '.Description // "No description provided"' validation-output/main-template-validation.json)
-          echo "📝 Description: ${DESCRIPTION}"
+    #       # Extract and display description
+    #       DESCRIPTION=$(jq -r '.Description // "No description provided"' validation-output/main-template-validation.json)
+    #       echo "📝 Description: ${DESCRIPTION}"
           
-          # Extract and display capabilities
-          CAPABILITIES=$(jq -r '.Capabilities[]? // empty' validation-output/main-template-validation.json)
-          if [[ -n "${CAPABILITIES}" ]]; then
-            echo "🔐 Required Capabilities:"
-            echo "${CAPABILITIES}" | while read -r capability; do
-              echo "  - ${capability}"
-            done
+    #       # Extract and display capabilities
+    #       CAPABILITIES=$(jq -r '.Capabilities[]? // empty' validation-output/main-template-validation.json)
+    #       if [[ -n "${CAPABILITIES}" ]]; then
+    #         echo "🔐 Required Capabilities:"
+    #         echo "${CAPABILITIES}" | while read -r capability; do
+    #           echo "  - ${capability}"
+    #         done
             
-            # Display capabilities reason if available
-            CAPABILITIES_REASON=$(jq -r '.CapabilitiesReason // empty' validation-output/main-template-validation.json)
-            if [[ -n "${CAPABILITIES_REASON}" ]]; then
-              echo "💡 Reason: ${CAPABILITIES_REASON}"
-            fi
-          else
-            echo "🔐 No special capabilities required"
-          fi
+    #         # Display capabilities reason if available
+    #         CAPABILITIES_REASON=$(jq -r '.CapabilitiesReason // empty' validation-output/main-template-validation.json)
+    #         if [[ -n "${CAPABILITIES_REASON}" ]]; then
+    #           echo "💡 Reason: ${CAPABILITIES_REASON}"
+    #         fi
+    #       else
+    #         echo "🔐 No special capabilities required"
+    #       fi
           
-          # Extract and display parameters
-          PARAMETERS=$(jq -r '.Parameters[]? // empty' validation-output/main-template-validation.json)
-          if [[ -n "${PARAMETERS}" ]]; then
-            echo "📝 Template Parameters:"
-            jq -r '.Parameters[] | "  - \(.ParameterKey): \(.Description // "No description") (Default: \(.DefaultValue // "None"))"' validation-output/main-template-validation.json
+    #       # Extract and display parameters
+    #       PARAMETERS=$(jq -r '.Parameters[]? // empty' validation-output/main-template-validation.json)
+    #       if [[ -n "${PARAMETERS}" ]]; then
+    #         echo "📝 Template Parameters:"
+    #         jq -r '.Parameters[] | "  - \(.ParameterKey): \(.Description // "No description") (Default: \(.DefaultValue // "None"))"' validation-output/main-template-validation.json
             
-            # Count parameters
-            PARAM_COUNT=$(jq '.Parameters | length' validation-output/main-template-validation.json)
-            echo "📊 Total parameters: ${PARAM_COUNT}"
-          else
-            echo "📝 No parameters defined in template"
-          fi
+    #         # Count parameters
+    #         PARAM_COUNT=$(jq '.Parameters | length' validation-output/main-template-validation.json)
+    #         echo "📊 Total parameters: ${PARAM_COUNT}"
+    #       else
+    #         echo "📝 No parameters defined in template"
+    #       fi
           
-          # Extract and display metadata if available
-          METADATA=$(jq -r '.Metadata // empty' validation-output/main-template-validation.json)
-          if [[ -n "${METADATA}" ]] && [[ "${METADATA}" != "null" ]]; then
-            echo "🏷️ Template includes metadata"
-          fi
+    #       # Extract and display metadata if available
+    #       METADATA=$(jq -r '.Metadata // empty' validation-output/main-template-validation.json)
+    #       if [[ -n "${METADATA}" ]] && [[ "${METADATA}" != "null" ]]; then
+    #         echo "🏷️ Template includes metadata"
+    #       fi
           
-          echo "::endgroup::"
+    #       echo "::endgroup::"
           
-          # Set success outputs
-          echo "result=success" >> $GITHUB_OUTPUT
-          echo "template-path=${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+    #       # Set success outputs
+    #       echo "result=success" >> $GITHUB_OUTPUT
+    #       echo "template-path=${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
+    #       echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
           
-        else
-          echo "❌ Template validation failed after all retry attempts!"
-          echo "⏱️ Validation failed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     else
+    #       echo "❌ Template validation failed after all retry attempts!"
+    #       echo "⏱️ Validation failed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           
-          # Comprehensive error analysis and reporting
-          echo "::group::🔍 Detailed Error Analysis"
+    #       # Comprehensive error analysis and reporting
+    #       echo "::group::🔍 Detailed Error Analysis"
           
-          if [[ -f validation-output/main-template-errors.log ]]; then
-            echo "📄 Raw error output:"
-            cat validation-output/main-template-errors.log
-            echo ""
+    #       if [[ -f validation-output/main-template-errors.log ]]; then
+    #         echo "📄 Raw error output:"
+    #         cat validation-output/main-template-errors.log
+    #         echo ""
             
-            # Extract and categorize different types of errors
-            ERROR_CONTENT=$(cat validation-output/main-template-errors.log)
+    #         # Extract and categorize different types of errors
+    #         ERROR_CONTENT=$(cat validation-output/main-template-errors.log)
             
-            # Try multiple methods to extract error messages
-            ERROR_MESSAGE=""
+    #         # Try multiple methods to extract error messages
+    #         ERROR_MESSAGE=""
             
-            # Method 1: Extract JSON error message
-            JSON_ERROR=$(echo "${ERROR_CONTENT}" | grep -o '"message":"[^"]*"' | sed 's/"message":"\([^"]*\)"/\1/' | head -1)
-            if [[ -n "${JSON_ERROR}" ]]; then
-              ERROR_MESSAGE="${JSON_ERROR}"
-            fi
+    #         # Method 1: Extract JSON error message
+    #         JSON_ERROR=$(echo "${ERROR_CONTENT}" | grep -o '"message":"[^"]*"' | sed 's/"message":"\([^"]*\)"/\1/' | head -1)
+    #         if [[ -n "${JSON_ERROR}" ]]; then
+    #           ERROR_MESSAGE="${JSON_ERROR}"
+    #         fi
             
-            # Method 2: Extract ValidationError
-            if [[ -z "${ERROR_MESSAGE}" ]]; then
-              VALIDATION_ERROR=$(echo "${ERROR_CONTENT}" | grep -o "ValidationError[^:]*: [^\\n]*" | head -1)
-              if [[ -n "${VALIDATION_ERROR}" ]]; then
-                ERROR_MESSAGE="${VALIDATION_ERROR}"
-              fi
-            fi
+    #         # Method 2: Extract ValidationError
+    #         if [[ -z "${ERROR_MESSAGE}" ]]; then
+    #           VALIDATION_ERROR=$(echo "${ERROR_CONTENT}" | grep -o "ValidationError[^:]*: [^\\n]*" | head -1)
+    #           if [[ -n "${VALIDATION_ERROR}" ]]; then
+    #             ERROR_MESSAGE="${VALIDATION_ERROR}"
+    #           fi
+    #         fi
             
-            # Method 3: Extract any error line
-            if [[ -z "${ERROR_MESSAGE}" ]]; then
-              ERROR_MESSAGE=$(echo "${ERROR_CONTENT}" | grep -i "error" | head -1)
-            fi
+    #         # Method 3: Extract any error line
+    #         if [[ -z "${ERROR_MESSAGE}" ]]; then
+    #           ERROR_MESSAGE=$(echo "${ERROR_CONTENT}" | grep -i "error" | head -1)
+    #         fi
             
-            # Method 4: Use first non-empty line
-            if [[ -z "${ERROR_MESSAGE}" ]]; then
-              ERROR_MESSAGE=$(echo "${ERROR_CONTENT}" | grep -v "^$" | head -1)
-            fi
+    #         # Method 4: Use first non-empty line
+    #         if [[ -z "${ERROR_MESSAGE}" ]]; then
+    #           ERROR_MESSAGE=$(echo "${ERROR_CONTENT}" | grep -v "^$" | head -1)
+    #         fi
             
-            # Categorize error types for better user guidance
-            if echo "${ERROR_CONTENT}" | grep -q "ValidationError"; then
-              echo "🏷️ Error Type: Template Syntax/Structure Error"
-              echo "💡 Suggestion: Check your CloudFormation template syntax and structure"
-            elif echo "${ERROR_CONTENT}" | grep -q "AccessDenied\|UnauthorizedOperation"; then
-              echo "🏷️ Error Type: AWS Authentication/Authorization Error"
-              echo "💡 Suggestion: Check your AWS credentials and IAM permissions"
-            elif echo "${ERROR_CONTENT}" | grep -q "InvalidUserID.NotFound"; then
-              echo "🏷️ Error Type: AWS Account/User Error"
-              echo "💡 Suggestion: Verify your AWS account configuration"
-            elif echo "${ERROR_CONTENT}" | grep -q "RequestLimitExceeded\|Throttling"; then
-              echo "🏷️ Error Type: AWS API Rate Limiting"
-              echo "💡 Suggestion: The validation was rate limited, try again later"
-            elif echo "${ERROR_CONTENT}" | grep -q "ServiceUnavailable\|InternalError"; then
-              echo "🏷️ Error Type: AWS Service Error"
-              echo "💡 Suggestion: AWS CloudFormation service may be experiencing issues"
-            else
-              echo "🏷️ Error Type: Unknown Error"
-              echo "💡 Suggestion: Check the error details above for more information"
-            fi
+    #         # Categorize error types for better user guidance
+    #         if echo "${ERROR_CONTENT}" | grep -q "ValidationError"; then
+    #           echo "🏷️ Error Type: Template Syntax/Structure Error"
+    #           echo "💡 Suggestion: Check your CloudFormation template syntax and structure"
+    #         elif echo "${ERROR_CONTENT}" | grep -q "AccessDenied\|UnauthorizedOperation"; then
+    #           echo "🏷️ Error Type: AWS Authentication/Authorization Error"
+    #           echo "💡 Suggestion: Check your AWS credentials and IAM permissions"
+    #         elif echo "${ERROR_CONTENT}" | grep -q "InvalidUserID.NotFound"; then
+    #           echo "🏷️ Error Type: AWS Account/User Error"
+    #           echo "💡 Suggestion: Verify your AWS account configuration"
+    #         elif echo "${ERROR_CONTENT}" | grep -q "RequestLimitExceeded\|Throttling"; then
+    #           echo "🏷️ Error Type: AWS API Rate Limiting"
+    #           echo "💡 Suggestion: The validation was rate limited, try again later"
+    #         elif echo "${ERROR_CONTENT}" | grep -q "ServiceUnavailable\|InternalError"; then
+    #           echo "🏷️ Error Type: AWS Service Error"
+    #           echo "💡 Suggestion: AWS CloudFormation service may be experiencing issues"
+    #         else
+    #           echo "🏷️ Error Type: Unknown Error"
+    #           echo "💡 Suggestion: Check the error details above for more information"
+    #         fi
             
-            # Create appropriate GitHub error annotation
-            if [[ -n "${ERROR_MESSAGE}" ]]; then
-              echo "::error title=CloudFormation Validation Failed::${ERROR_MESSAGE}"
-            else
-              echo "::error title=CloudFormation Validation Failed::Template validation failed. Check logs for details."
-            fi
+    #         # Create appropriate GitHub error annotation
+    #         if [[ -n "${ERROR_MESSAGE}" ]]; then
+    #           echo "::error title=CloudFormation Validation Failed::${ERROR_MESSAGE}"
+    #         else
+    #           echo "::error title=CloudFormation Validation Failed::Template validation failed. Check logs for details."
+    #         fi
             
-          else
-            echo "❌ No error log file found"
-            ERROR_MESSAGE="Template validation failed with no error details"
-            echo "::error title=CloudFormation Validation Failed::${ERROR_MESSAGE}"
-          fi
+    #       else
+    #         echo "❌ No error log file found"
+    #         ERROR_MESSAGE="Template validation failed with no error details"
+    #         echo "::error title=CloudFormation Validation Failed::${ERROR_MESSAGE}"
+    #       fi
           
-          echo "::endgroup::"
+    #       echo "::endgroup::"
           
-          # Set failure outputs
-          echo "result=failure" >> $GITHUB_OUTPUT
-          echo "template-path=${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
-          echo "error=${ERROR_MESSAGE:-"Template validation failed"}" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+    #       # Set failure outputs
+    #       echo "result=failure" >> $GITHUB_OUTPUT
+    #       echo "template-path=${TEMPLATE_PATH}" >> $GITHUB_OUTPUT
+    #       echo "error=${ERROR_MESSAGE:-"Template validation failed"}" >> $GITHUB_OUTPUT
+    #       echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
           
-          exit 1
-        fi
+    #       exit 1
+    #     fi
 
-    - name: Validate nested CloudFormation templates
-      id: nested-validation
-      if: steps.main-validation.outputs.result == 'success'
-      shell: bash
-      env:
-        # AWS CLI configuration for retries and timeouts
-        AWS_MAX_ATTEMPTS: 3
-        AWS_RETRY_MODE: adaptive
-        AWS_CLI_READ_TIMEOUT: 300
-        AWS_CLI_CONNECT_TIMEOUT: 60
-      run: |
-        set -euo pipefail
+    # - name: Generate validation summary
+    #   id: summary
+    #   if: always()
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
         
-        # Enable detailed logging
-        echo "::group::🔧 Debug Information"
-        echo "🔍 Starting nested CloudFormation templates validation"
-        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "🌍 AWS Region: ${{ inputs.aws-region }}"
-        echo "::endgroup::"
+    #     # Enable detailed logging
+    #     echo "::group::🔧 Debug Information"
+    #     echo "📊 Starting validation summary generation"
+    #     echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     echo "🔧 Summary generation always runs regardless of previous step results"
+    #     echo "::endgroup::"
         
-        # Set environment variables
-        CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
-        NESTED_DIR="${CLOUDFORMATION_DIR}/nested-templates"
+    #     echo "📊 Generating comprehensive validation summary..."
         
-        echo "::group::📋 Configuration"
-        echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
-        echo "📁 Nested Templates Directory: ${NESTED_DIR}"
-        echo "::endgroup::"
+    #     # Read validation results from previous steps with error handling
+    #     echo "::group::📋 Collecting Validation Results"
         
-        echo "🔍 Checking for nested templates in: ${NESTED_DIR}"
+    #     RESULT="${{ steps.validation.outputs.result }}"
+    #     echo "🔍 Template validation result: ${RESULT:-"not available"}"
         
-        # Check if nested templates directory exists
-        if [[ ! -d "${NESTED_DIR}" ]]; then
-          echo "⏭️ No nested templates directory found. Skipping nested template validation."
-          echo "💡 To include nested template validation, create a 'nested-templates' directory in your CloudFormation directory"
-          echo "result=skipped" >> $GITHUB_OUTPUT
-          echo "message=No nested templates directory found" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          exit 0
-        fi
+    #     # Get file paths with fallbacks
+    #     TEMPLATE_PATH="${{ steps.validation.outputs.template-path }}"
+    #     PARAMETERS_PATH="${{ steps.parameters-validation.outputs.parameters-path }}"
         
-        echo "📁 Found nested templates directory: ${NESTED_DIR}"
+    #     echo "📄 Template path: ${TEMPLATE_PATH:-"not available"}"
+    #     echo "📄 Parameters path: ${PARAMETERS_PATH:-"not available"}"
         
-        # Check directory permissions
-        if [[ ! -r "${NESTED_DIR}" ]]; then
-          echo "::error::Nested templates directory is not readable: ${NESTED_DIR}"
-          echo "result=failure" >> $GITHUB_OUTPUT
-          echo "message=Nested templates directory is not readable" >> $GITHUB_OUTPUT
-          exit 1
-        fi
+    #     # Get timestamps for tracking
+    #     TIMESTAMP="${{ steps.validation.outputs.validation-timestamp }}"
         
-        # Find all YAML and JSON files in nested directory
-        echo "🔄 Searching for CloudFormation templates..."
-        echo "::group::🔍 Template Discovery"
+    #     echo "⏱️ Template validation timestamp: ${MAIN_TIMESTAMP:-"not available"}"
         
-        # Use more robust find command with error handling
-        NESTED_TEMPLATES=""
-        if NESTED_TEMPLATES=$(find "${NESTED_DIR}" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) 2>/dev/null); then
-          echo "✅ Template search completed successfully"
-        else
-          echo "⚠️ Warning: Error occurred during template search, but continuing..."
-          NESTED_TEMPLATES=""
-        fi
+    #     echo "::endgroup::"
         
-        # Additional search for hidden or unusual files
-        echo "📊 Directory contents:"
-        ls -la "${NESTED_DIR}" 2>/dev/null || echo "Unable to list directory contents"
+    #     # Determine overall validation result with comprehensive logic
+    #     echo "::group::🎯 Validation Result"
         
-        echo "::endgroup::"
+    #     OVERALL_RESULT="success"
+    #     FAILURE_REASONS=()
         
-        if [[ -z "${NESTED_TEMPLATES}" ]]; then
-          echo "⏭️ No CloudFormation template files found in nested directory. Skipping validation."
-          echo "💡 Supported file extensions: .yaml, .yml, .json"
-          echo "result=skipped" >> $GITHUB_OUTPUT
-          echo "message=No template files found in nested directory" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          exit 0
-        fi
+    #     echo "🎯 Validation Result: ${OVERALL_RESULT}"
+    #     if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
+    #       echo "📋 Failure reasons:"
+    #       for reason in "${FAILURE_REASONS[@]}"; do
+    #         echo "  - ${reason}"
+    #       done
+    #     fi
         
-        echo "📋 Found nested templates:"
-        TEMPLATE_COUNT=0
-        while IFS= read -r template; do
-          [[ -z "${template}" ]] && continue
-          echo "  - ${template}"
-          ((TEMPLATE_COUNT++))
-        done <<< "${NESTED_TEMPLATES}"
+    #     echo "::endgroup::"
         
-        echo "📊 Total templates to validate: ${TEMPLATE_COUNT}"
+    #     # Generate status indicators with error handling
+    #     get_status_indicator() {
+    #       case "$1" in
+    #         "success") echo "✅" ;;
+    #         "failure") echo "❌" ;;
+    #         "skipped") echo "⏭️" ;;
+    #         "") echo "❓" ;;
+    #         *) echo "❓" ;;
+    #       esac
+    #     }
         
-        # Create output directory for nested validation results
-        mkdir -p validation-output/nested
+    #     ICON=$(get_status_indicator "${RESULT}")
         
-        # Initialize validation tracking variables
-        VALIDATION_SUCCESS=true
-        FAILED_TEMPLATES=""
-        VALIDATED_COUNT=0
-        FAILED_COUNT=0
-        SKIPPED_COUNT=0
+    #     echo "🎨 Status icons: Main=${MAIN_ICON}, Nested=${NESTED_ICON}, Parameters=${PARAMETERS_ICON}, Overall=${OVERALL_ICON}"
         
-        # Function to validate a single template with retry logic
-        validate_nested_template() {
-          local template_path="$1"
-          local template_name=$(basename "${template_path}")
-          local output_file="validation-output/nested/${template_name}-validation.json"
-          local error_file="validation-output/nested/${template_name}-errors.log"
-          local attempt=1
-          local max_attempts=3
-          local retry_delay=2
-          
-          echo "::group::🔍 Validating ${template_name}"
-          echo "📄 Template: ${template_path}"
-          echo "📏 File size: $(stat -f%z "${template_path}" 2>/dev/null || stat -c%s "${template_path}" 2>/dev/null || echo "unknown") bytes"
-          
-          # Check if file is readable and not empty
-          if [[ ! -r "${template_path}" ]]; then
-            echo "::error::Template file is not readable: ${template_path}"
-            echo "❌ ${template_name}: File not readable"
-            echo "::endgroup::"
-            return 1
-          fi
-          
-          local file_size=$(stat -f%z "${template_path}" 2>/dev/null || stat -c%s "${template_path}" 2>/dev/null || echo "0")
-          if [[ "${file_size}" -eq 0 ]]; then
-            echo "::warning::Template file is empty: ${template_path}"
-            echo "⏭️ ${template_name}: Skipping empty file"
-            echo "::endgroup::"
-            return 2  # Special return code for skipped files
-          fi
-          
-          # Show file preview for debugging
-          echo "📄 Template preview (first 5 lines):"
-          head -5 "${template_path}" 2>/dev/null | sed 's/^/  /' || echo "  Unable to preview file"
-          
-          while [[ $attempt -le $max_attempts ]]; do
-            echo "🔄 Validation attempt ${attempt}/${max_attempts} for ${template_name}"
-            
-            # Clear previous attempt files
-            rm -f "${output_file}" "${error_file}"
-            
-            if timeout 300 aws cloudformation validate-template \
-              --template-body "file://${template_path}" \
-              --region "${{ inputs.aws-region }}" \
-              --output json > "${output_file}" 2> "${error_file}"; then
-              
-              echo "✅ ${template_name}: Validation successful on attempt ${attempt}!"
-              
-              # Validate output file
-              if [[ -f "${output_file}" ]] && jq empty "${output_file}" 2>/dev/null; then
-                # Display basic template info
-                local description=$(jq -r '.Description // "No description"' "${output_file}")
-                echo "📝 Description: ${description}"
-                
-                # Show capabilities if any
-                local capabilities=$(jq -r '.Capabilities[]? // empty' "${output_file}")
-                if [[ -n "${capabilities}" ]]; then
-                  echo "🔐 Capabilities: $(echo "${capabilities}" | tr '\n' ', ' | sed 's/,$//')"
-                fi
-                
-                # Show parameter count
-                local param_count=$(jq '.Parameters | length' "${output_file}" 2>/dev/null || echo "0")
-                echo "📊 Parameters: ${param_count}"
-                
-                echo "::endgroup::"
-                return 0
-              else
-                echo "⚠️ Warning: Invalid output file generated, treating as failure"
-                echo "::endgroup::"
-                return 1
-              fi
-              
-            else
-              local exit_code=$?
-              echo "❌ Validation attempt ${attempt} failed with exit code: ${exit_code}"
-              
-              # Analyze error for retry decision
-              local should_retry=true
-              if [[ -f "${error_file}" ]]; then
-                local error_content=$(cat "${error_file}")
-                
-                # Don't retry on syntax errors or auth errors
-                if echo "${error_content}" | grep -q "ValidationError\|AccessDenied\|UnauthorizedOperation\|InvalidUserID.NotFound"; then
-                  should_retry=false
-                fi
-                
-                echo "🔍 Error preview:"
-                head -2 "${error_file}" | sed 's/^/  /' || echo "  No error details available"
-              fi
-              
-              if [[ $attempt -lt $max_attempts ]] && [[ "$should_retry" == "true" ]]; then
-                echo "⏳ Waiting ${retry_delay} seconds before retry..."
-                sleep $retry_delay
-                retry_delay=$((retry_delay * 2))
-              else
-                if [[ "$should_retry" == "false" ]]; then
-                  echo "🚫 Error type detected that should not be retried"
-                fi
-                break
-              fi
-              
-              attempt=$((attempt + 1))
-            fi
-          done
-          
-          echo "❌ ${template_name}: All validation attempts failed"
-          echo "::endgroup::"
-          return 1
-        }
+    #     # Validate that GITHUB_STEP_SUMMARY is available
+    #     if [[ -z "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    #       echo "::warning::GITHUB_STEP_SUMMARY environment variable is not set, summary will not be displayed"
+    #       echo "📄 Summary would have been written to GitHub step summary"
+    #     else
+    #       echo "📝 Writing summary to: ${GITHUB_STEP_SUMMARY}"
+    #     fi
         
-        # Validate each nested template
-        echo "🔄 Validating nested templates..."
-        echo "⏱️ Validation started at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     # Create comprehensive markdown summary for GitHub step summary
+    #     echo "::group::📝 Generating Markdown Summary"
         
-        while IFS= read -r template_path; do
-          [[ -z "${template_path}" ]] && continue
-          
-          template_name=$(basename "${template_path}")
-          
-          # Call validation function
-          if validate_nested_template "${template_path}"; then
-            ((VALIDATED_COUNT++))
-          elif [[ $? -eq 2 ]]; then
-            # File was skipped (empty)
-            ((SKIPPED_COUNT++))
-          else
-            # Validation failed
-            VALIDATION_SUCCESS=false
-            FAILED_TEMPLATES="${FAILED_TEMPLATES}${template_name} "
-            ((FAILED_COUNT++))
-            
-            # Enhanced error reporting
-            error_file="validation-output/nested/${template_name}-errors.log"
-            if [[ -f "${error_file}" ]]; then
-              echo "::group::🔍 Detailed Error Analysis for ${template_name}"
-              
-              local error_content=$(cat "${error_file}")
-              
-              # Extract and categorize error message
-              local error_message=""
-              
-              # Try multiple extraction methods
-              if error_message=$(echo "${error_content}" | grep -o '"message":"[^"]*"' | sed 's/"message":"\([^"]*\)"/\1/' | head -1); then
-                echo "📄 Extracted error: ${error_message}"
-              elif error_message=$(echo "${error_content}" | grep -o "ValidationError[^:]*: [^\\n]*" | head -1); then
-                echo "📄 Validation error: ${error_message}"
-              else
-                error_message=$(echo "${error_content}" | grep -v "^$" | head -1)
-                echo "📄 Raw error: ${error_message}"
-              fi
-              
-              # Categorize error type
-              if echo "${error_content}" | grep -q "ValidationError"; then
-                echo "🏷️ Error Type: Template Syntax/Structure Error"
-                echo "::error title=Nested Template Syntax Error::${template_name}: ${error_message}"
-              elif echo "${error_content}" | grep -q "AccessDenied\|UnauthorizedOperation"; then
-                echo "🏷️ Error Type: AWS Authentication/Authorization Error"
-                echo "::error title=Nested Template Auth Error::${template_name}: ${error_message}"
-              else
-                echo "🏷️ Error Type: Unknown Error"
-                echo "::error title=Nested Template Validation Failed::${template_name}: ${error_message}"
-              fi
-              
-              echo "📄 Full error log:"
-              cat "${error_file}" | sed 's/^/  /'
-              echo "::endgroup::"
-            else
-              echo "::error title=Nested Template Validation Failed::${template_name}: No error details available"
-            fi
-          fi
-          
-        done <<< "${NESTED_TEMPLATES}"
+    #     # Function to safely write to step summary
+    #     write_to_summary() {
+    #       if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    #         cat >> "$GITHUB_STEP_SUMMARY"
+    #       else
+    #         echo "Summary content (would be written to GitHub step summary):"
+    #         cat
+    #       fi
+    #     }
         
-        echo "⏱️ Validation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        
-        # Generate comprehensive summary and set outputs
-        echo ""
-        echo "::group::📊 Nested Templates Validation Summary"
-        echo "📋 Validation Results:"
-        echo "  Total templates found: $((VALIDATED_COUNT + FAILED_COUNT + SKIPPED_COUNT))"
-        echo "  Successfully validated: ${VALIDATED_COUNT}"
-        echo "  Failed validation: ${FAILED_COUNT}"
-        echo "  Skipped (empty files): ${SKIPPED_COUNT}"
-        
-        if [[ ${FAILED_COUNT} -gt 0 ]]; then
-          echo "  Failed templates: ${FAILED_TEMPLATES}"
-        fi
-        echo "::endgroup::"
-        
-        if [[ "${VALIDATION_SUCCESS}" == "true" ]]; then
-          if [[ ${VALIDATED_COUNT} -gt 0 ]]; then
-            echo "✅ All nested templates validated successfully!"
-            echo "result=success" >> $GITHUB_OUTPUT
-            echo "message=All ${VALIDATED_COUNT} nested templates validated successfully" >> $GITHUB_OUTPUT
-          else
-            echo "⏭️ No templates were validated (all were skipped)"
-            echo "result=skipped" >> $GITHUB_OUTPUT
-            echo "message=All nested templates were skipped (empty files)" >> $GITHUB_OUTPUT
-          fi
-        else
-          echo "❌ Some nested templates failed validation!"
-          echo "result=failure" >> $GITHUB_OUTPUT
-          echo "message=${FAILED_COUNT} nested templates failed validation" >> $GITHUB_OUTPUT
-          echo "failed-templates=${FAILED_TEMPLATES}" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        
-        # Set common outputs
-        echo "validated-count=${VALIDATED_COUNT}" >> $GITHUB_OUTPUT
-        echo "failed-count=${FAILED_COUNT}" >> $GITHUB_OUTPUT
-        echo "skipped-count=${SKIPPED_COUNT}" >> $GITHUB_OUTPUT
-        echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+    #     # Generate the main summary
+    #     write_to_summary << EOF
+    #       # ${OVERALL_ICON} CloudFormation Validation Summary
 
-    - name: Validate parameters file
-      id: parameters-validation
-      if: steps.main-validation.outputs.result == 'success'
-      shell: bash
-      run: |
-        set -euo pipefail
-        
-        # Enable detailed logging
-        echo "::group::🔧 Debug Information"
-        echo "🔍 Starting parameters validation"
-        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "🔧 jq Version: $(jq --version 2>&1 || echo 'jq not available')"
-        echo "::endgroup::"
-        
-        # Set environment variables with validation
-        CLOUDFORMATION_DIR="${{ inputs.cloudformation-dir }}"
-        PARAMETERS_INPUT="${{ inputs.parameters }}"
-        
-        # Function to display comprehensive error examples and guidance
-        show_parameter_format_help() {
-          local error_context="$1"  # "json", "structure", "edge-case", or "general"
-          
-          echo ""
-          echo "📖 CloudFormation Parameters Input Format Guide:"
-          echo ""
-          echo "✅ Correct format:"
-          echo '[{"ParameterName": "string", "ParameterValue": "string"}]'
-          echo ""
-          echo "📄 Complete examples:"
-          echo ""
-          echo "Empty parameters (no validation needed):"
-          echo '[]'
-          echo ""
-          echo "Single parameter:"
-          echo '[{"ParameterName": "Environment", "ParameterValue": "production"}]'
-          echo ""
-          echo "Multiple parameters:"
-          cat << 'EOF'
-            [
-              {"ParameterName": "Environment", "ParameterValue": "production"},
-              {"ParameterName": "InstanceType", "ParameterValue": "t3.micro"},
-              {"ParameterName": "KeyName", "ParameterValue": "my-key-pair"},
-              {"ParameterName": "VpcId", "ParameterValue": "vpc-12345678"}
-            ]
-            EOF
-          echo ""
-          
-          case "${error_context}" in
-            "json")
-              echo "🚫 Common JSON syntax errors to avoid:"
-              echo ""
-              echo "❌ Missing quotes:"
-              echo '[{ParameterName: Environment, ParameterValue: production}]'
-              echo ""
-              echo "❌ Single quotes (use double quotes):"
-              echo "[{'ParameterName': 'Environment', 'ParameterValue': 'production'}]"
-              echo ""
-              echo "❌ Trailing comma:"
-              echo '[{"ParameterName": "Environment", "ParameterValue": "production",}]'
-              echo ""
-              echo "❌ Unescaped quotes in values:"
-              echo '[{"ParameterName": "Message", "ParameterValue": "Hello "World""}]'
-              echo "✅ Properly escaped:"
-              echo '[{"ParameterName": "Message", "ParameterValue": "Hello \"World\""}]'
-              ;;
-            "structure")
-              echo "🚫 Common structure errors to avoid:"
-              echo ""
-              echo "❌ Object instead of array:"
-              echo '{"ParameterName": "Environment", "ParameterValue": "production"}'
-              echo ""
-              echo "❌ Wrong field names:"
-              echo '[{"ParameterKey": "Environment", "ParameterValue": "production"}]'
-              echo ""
-              echo "❌ Missing required fields:"
-              echo '[{"ParameterName": "Environment"}]'
-              echo ""
-              echo "❌ Non-string values:"
-              echo '[{"ParameterName": "Port", "ParameterValue": 8080}]'
-              echo "✅ String values:"
-              echo '[{"ParameterName": "Port", "ParameterValue": "8080"}]'
-              ;;
-            "edge-case")
-              echo "💡 Edge cases and best practices:"
-              echo ""
-              echo "✅ Empty parameter value (allowed):"
-              echo '[{"ParameterName": "OptionalParam", "ParameterValue": ""}]'
-              echo ""
-              echo "✅ Special characters in values:"
-              echo '[{"ParameterName": "S3Path", "ParameterValue": "s3://bucket/path/file.txt"}]'
-              echo ""
-              echo "⚠️ Avoid very long parameter names (>255 chars)"
-              echo "⚠️ Avoid very long parameter values (>4096 chars)"
-              echo "⚠️ Parameter names should be alphanumeric for best compatibility"
-              ;;
-          esac
-          
-          echo ""
-          echo "🔗 For more information, see CloudFormation documentation:"
-          echo "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html"
-        }
-        
-        # Function to parse and validate parameters input
-        parse_parameters_input() {
-          local parameters_input="$1"
-          local temp_file="validation-output/parameters/input-parameters.json"
-          
-          echo "::group::🔍 Parsing Parameters Input"
-          echo "📝 Processing parameters from input..."
-          
-          # Create output directory
-          mkdir -p validation-output/parameters
-          
-          # Check if input is empty
-          if [[ -z "${parameters_input}" ]]; then
-            echo "⚠️ Parameters input is empty"
-            echo "💡 If you don't need parameters, you can:"
-            echo "  - Omit the 'parameters' input entirely, or"
-            echo "  - Use an empty array: []"
-            echo ""
-            echo "📄 Example of empty parameters:"
-            echo 'parameters: "[]"'
-            echo "::endgroup::"
-            return 1
-          fi
-          
-          # Pre-validation checks for common mistakes
-          echo "🔍 Performing pre-validation checks..."
-          
-          # Check for obvious non-JSON content
-          if [[ "${parameters_input}" != \[* ]] && [[ "${parameters_input}" != \{* ]]; then
-            echo "❌ Parameters input doesn't appear to be JSON!"
-            echo "🔍 Input starts with: ${parameters_input:0:50}..."
-            echo ""
-            echo "💡 Common mistakes:"
-            echo "  - Forgetting to wrap in quotes in YAML"
-            echo "  - Using shell variable syntax instead of JSON"
-            echo "  - Providing plain text instead of JSON"
-            echo ""
-            echo "📄 Correct YAML usage:"
-            echo 'parameters: "[{\"ParameterName\": \"Environment\", \"ParameterValue\": \"production\"}]"'
-            echo ""
-            show_parameter_format_help "json"
-            echo "::error title=Parameters Input Format Error::Input doesn't appear to be valid JSON format"
-            echo "::endgroup::"
-            return 1
-          fi
-          
-          # Check for common YAML multiline mistakes
-          if echo "${parameters_input}" | grep -q $'\n'; then
-            echo "⚠️ Warning: Parameters input contains newlines"
-            echo "💡 If using YAML multiline syntax, ensure proper JSON formatting"
-            echo ""
-            echo "📄 YAML multiline example:"
-            cat << 'EOF'
-              parameters: |
-                [
-                  {"ParameterName": "Environment", "ParameterValue": "production"},
-                  {"ParameterName": "InstanceType", "ParameterValue": "t3.micro"}
-                ]
-              EOF
-          fi
-          
-          # Validate JSON syntax
-          echo "🔄 Validating JSON syntax..."
-          if ! echo "${parameters_input}" | jq empty 2> validation-output/parameters/input-json-errors.log; then
-            echo "❌ Invalid JSON format in parameters input!"
-            
-            if [[ -f validation-output/parameters/input-json-errors.log ]]; then
-              local error_content=$(cat validation-output/parameters/input-json-errors.log)
-              echo "🔍 JSON Error Details:"
-              echo "${error_content}"
-              
-              # Extract and analyze specific error types
-              local error_message=$(echo "${error_content}" | head -1)
-              local error_type="Generic JSON Error"
-              
-              # Categorize common JSON errors for better user guidance
-              if echo "${error_content}" | grep -q "parse error.*Expected.*at line"; then
-                error_type="JSON Syntax Error"
-                local line_info=$(echo "${error_content}" | grep -o "at line [0-9]*" | head -1)
-                if [[ -n "${line_info}" ]]; then
-                  echo "📍 Error location: ${line_info}"
-                fi
-              elif echo "${error_content}" | grep -q "Invalid escape sequence"; then
-                error_type="JSON Escape Sequence Error"
-              elif echo "${error_content}" | grep -q "Unexpected end of JSON input"; then
-                error_type="Incomplete JSON Error"
-              elif echo "${error_content}" | grep -q "Unexpected token"; then
-                error_type="JSON Token Error"
-              fi
-              
-              echo "🏷️ Error Type: ${error_type}"
-              echo "::error title=Parameters Input JSON Error (${error_type})::${error_message}"
-            else
-              echo "::error title=Parameters Input JSON Error::Invalid JSON format with no error details"
-            fi
-            
-            show_parameter_format_help "json"
-            
-            echo "::endgroup::"
-            return 1
-          fi
-          
-          echo "✅ JSON syntax is valid"
-          
-          # Save input to temporary file for further processing
-          echo "${parameters_input}" > "${temp_file}"
-          
-          # Validate structure - ensure it's an array
-          echo "📋 Checking if root element is an array..."
-          if ! jq -e 'type == "array"' "${temp_file}" > /dev/null 2>&1; then
-            echo "❌ Parameters input structure validation failed!"
-            echo "🔍 Structure Error: Parameters input must be a JSON array"
-            
-            local current_type=$(jq -r 'type' "${temp_file}" 2>/dev/null || echo "unknown")
-            echo "📄 Current root type: ${current_type}"
-            echo ""
-            echo "📖 Expected format:"
-            echo '[{"ParameterName": "string", "ParameterValue": "string"}]'
-            echo ""
-            
-            # Provide specific guidance based on the detected type
-            case "${current_type}" in
-              "object")
-                echo "💡 Detected JSON object - you need to wrap it in an array:"
-                echo ""
-                echo "❌ Incorrect (object):"
-                echo '{"ParameterName": "Environment", "ParameterValue": "production"}'
-                echo ""
-                echo "✅ Correct (array of objects):"
-                echo '[{"ParameterName": "Environment", "ParameterValue": "production"}]'
-                ;;
-              "string")
-                echo "💡 Detected string value - parameters must be an array of objects:"
-                echo ""
-                echo "❌ Incorrect (string):"
-                echo '"Environment=production"'
-                echo ""
-                echo "✅ Correct (array of objects):"
-                echo '[{"ParameterName": "Environment", "ParameterValue": "production"}]'
-                ;;
-              "number"|"boolean")
-                echo "💡 Detected ${current_type} value - parameters must be an array of objects:"
-                echo ""
-                echo "✅ Correct format:"
-                echo '[{"ParameterName": "Environment", "ParameterValue": "production"}]'
-                ;;
-              "null")
-                echo "💡 Detected null value - use empty array for no parameters:"
-                echo ""
-                echo "✅ Correct format for no parameters:"
-                echo '[]'
-                ;;
-              *)
-                echo "💡 Unknown type detected - ensure you're providing a JSON array"
-                ;;
-            esac
-            
-            show_parameter_format_help "structure"
-            
-            echo "::error title=Parameters Input Structure Error::Parameters input must be a JSON array of parameter objects (current type: ${current_type})"
-            echo "::endgroup::"
-            return 1
-          fi
-          
-          echo "✅ Root element is an array"
-          
-          # Check array length
-          local param_count=$(jq 'length' "${temp_file}")
-          echo "📊 Array length: ${param_count}"
-          
-          if [[ "${param_count}" -eq 0 ]]; then
-            echo "⚠️ Parameters input is an empty array"
-            echo "✅ Structure is valid but no parameters defined"
-            echo "💡 Empty array is valid - parameter validation will be skipped"
-            echo "::endgroup::"
-            return 0
-          fi
-          
-          # Validate each parameter object structure
-          echo "🔄 Validating individual parameter objects..."
-          
-          local structure_errors=""
-          local jq_error_file="validation-output/parameters/structure-validation-errors.log"
-          
-          # Clear previous error log
-          rm -f "${jq_error_file}"
-          
-          if structure_errors=$(jq -r '
-            to_entries[] | 
-            select(
-              (.value | type != "object") or 
-              (.value | has("ParameterName") | not) or 
-              (.value | has("ParameterValue") | not) or
-              (.value.ParameterName | type != "string") or
-              (.value.ParameterValue | type != "string") or
-              (.value.ParameterName == "")
-            ) | 
-            "Parameter at index \(.key): \(
-              if (.value | type != "object") then "must be an object (currently: \(.value | type))"
-              elif (.value | has("ParameterName") | not) then "missing required ParameterName field"
-              elif (.value | has("ParameterValue") | not) then "missing required ParameterValue field"
-              elif (.value.ParameterName | type != "string") then "ParameterName must be a string (currently: \(.value.ParameterName | type))"
-              elif (.value.ParameterValue | type != "string") then "ParameterValue must be a string (currently: \(.value.ParameterValue | type))"
-              elif (.value.ParameterName == "") then "ParameterName cannot be empty"
-              else "unknown structural error"
-              end
-            )"
-          ' "${temp_file}" 2> "${jq_error_file}"); then
-            
-            if [[ -n "${structure_errors}" ]]; then
-              echo "❌ Parameters input structure validation failed!"
-              echo "🔍 Structure Validation Errors:"
-              echo "${structure_errors}"
-              echo ""
-              echo "📖 Expected format for each parameter:"
-              echo '{"ParameterName": "string", "ParameterValue": "string"}'
-              show_parameter_format_help "structure"
-              
-              # Create GitHub error annotations for each structure error
-              local error_count=0
-              while IFS= read -r error_line; do
-                [[ -z "${error_line}" ]] && continue
-                echo "::error title=Parameter Input Structure Error::${error_line}"
-                ((error_count++))
-              done <<< "${structure_errors}"
-              
-              echo "📊 Total structure errors: ${error_count}"
-              echo "::endgroup::"
-              return 1
-            fi
-          else
-            # jq command failed - this indicates a more serious issue
-            echo "❌ Critical error during structure validation!"
-            
-            if [[ -f "${jq_error_file}" ]]; then
-              local jq_error_content=$(cat "${jq_error_file}")
-              echo "🔍 jq Error Details:"
-              echo "${jq_error_content}"
-              echo "::error title=Parameter Structure Validation Failed::jq processing error: ${jq_error_content}"
-            else
-              echo "::error title=Parameter Structure Validation Failed::Unknown error during structure validation"
-            fi
-            
-            echo ""
-            echo "💡 This error suggests the JSON structure is severely malformed"
-            show_parameter_format_help "general"
-            echo "::endgroup::"
-            return 1
-          fi
-          
-          echo "✅ Parameters input structure validation successful!"
-          
-          # Additional edge case validation
-          echo "🔄 Performing additional edge case validation..."
-          
-          # Check for duplicate parameter names
-          local duplicate_names=""
-          if duplicate_names=$(jq -r '[.[].ParameterName] | group_by(.) | map(select(length > 1)) | flatten | unique | .[]?' "${temp_file}" 2>/dev/null); then
-            if [[ -n "${duplicate_names}" ]]; then
-              echo "❌ Duplicate parameter names detected!"
-              echo "🔍 Duplicate parameter names:"
-              local dup_count=0
-              while IFS= read -r dup_name; do
-                [[ -z "${dup_name}" ]] && continue
-                echo "  - ${dup_name}"
-                ((dup_count++))
-              done <<< "${duplicate_names}"
-              
-              echo ""
-              echo "💡 Each parameter name must be unique within the array"
-              echo "🔧 Fix: Remove or rename duplicate parameters"
-              echo ""
-              echo "📄 Example of corrected parameters:"
-              cat << 'EOF'
-                [
-                  {"ParameterName": "Environment", "ParameterValue": "production"},
-                  {"ParameterName": "EnvironmentType", "ParameterValue": "prod"}
-                ]
-                EOF
-              
-              local dup_names_list=$(echo "${duplicate_names}" | tr '\n' ', ' | sed 's/,$//')
-              echo "::error title=Duplicate Parameter Names::Found ${dup_count} duplicate parameter names: ${dup_names_list}"
-              echo "::endgroup::"
-              return 1
-            fi
-          fi
-          
-          # Check for parameters with very long names or values (potential issues)
-          local long_names=""
-          if long_names=$(jq -r '.[] | select((.ParameterName | length) > 255) | .ParameterName' "${temp_file}" 2>/dev/null); then
-            if [[ -n "${long_names}" ]]; then
-              echo "⚠️ Warning: Parameters with very long names detected (>255 characters):"
-              while IFS= read -r long_name; do
-                [[ -z "${long_name}" ]] && continue
-                local name_length=$(echo "${long_name}" | wc -c)
-                echo "  - ${long_name:0:50}... (${name_length} characters)"
-              done <<< "${long_names}"
-              echo "💡 CloudFormation parameter names should typically be under 255 characters"
-            fi
-          fi
-          
-          local long_values=""
-          if long_values=$(jq -r '.[] | select((.ParameterValue | length) > 4096) | .ParameterName' "${temp_file}" 2>/dev/null); then
-            if [[ -n "${long_values}" ]]; then
-              echo "⚠️ Warning: Parameters with very long values detected (>4096 characters):"
-              while IFS= read -r param_name; do
-                [[ -z "${param_name}" ]] && continue
-                local value_length=$(jq -r --arg name "${param_name}" '.[] | select(.ParameterName == $name) | .ParameterValue | length' "${temp_file}")
-                echo "  - ${param_name} (${value_length} characters)"
-              done <<< "${long_values}"
-              echo "💡 CloudFormation parameter values should typically be under 4096 characters"
-            fi
-          fi
-          
-          # Check for parameters with special characters that might cause issues
-          local special_char_names=""
-          if special_char_names=$(jq -r '.[] | select(.ParameterName | test("[^a-zA-Z0-9]")) | .ParameterName' "${temp_file}" 2>/dev/null); then
-            if [[ -n "${special_char_names}" ]]; then
-              echo "⚠️ Warning: Parameter names with special characters detected:"
-              while IFS= read -r special_name; do
-                [[ -z "${special_name}" ]] && continue
-                echo "  - ${special_name}"
-              done <<< "${special_char_names}"
-              echo "💡 CloudFormation parameter names should contain only alphanumeric characters"
-            fi
-          fi
-          
-          echo "📊 Successfully parsed ${param_count} parameters from input"
-          echo "::endgroup::"
-          
-          # Set the temp file path for use by calling function
-          echo "${temp_file}"
-          return 0
-        }
-        
-        echo "::group::📋 Configuration"
-        echo "🔍 CloudFormation Directory: ${CLOUDFORMATION_DIR}"
-        echo "🔧 Parameters Input Length: ${#PARAMETERS_INPUT}"
-        echo "::endgroup::"
-        
-        # Check if parameters input is provided
-        PARAMETERS_DATA_FILE=""
-        
-        if [[ -z "${PARAMETERS_INPUT}" ]]; then
-          echo "⏭️ No parameters provided. Skipping parameters validation."
-          echo "💡 To include parameters validation, use 'parameters' input with JSON array format"
-          echo "result=skipped" >> $GITHUB_OUTPUT
-          echo "message=No parameters provided" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        echo "🔍 Using parameters from input"
-        
-        # Parse and validate parameters input
-        if PARAMETERS_DATA_FILE=$(parse_parameters_input "${PARAMETERS_INPUT}"); then
-          echo "✅ Parameters input parsed successfully"
-          echo "📄 Data file: ${PARAMETERS_DATA_FILE}"
-        else
-          echo "❌ Parameters input parsing failed"
-          echo "result=failure" >> $GITHUB_OUTPUT
-          echo "error=Invalid parameters input format" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        
+    #       ## Overall Result: **${OVERALL_RESULT^^}**
 
-        
-        # Create output directory for parameters validation results
-        mkdir -p validation-output/parameters
-        
-        # Log data preview for debugging
-        echo "::group::📄 Parameters Data Preview"
-        echo "📄 Input content preview (first 500 characters):"
-        echo "${PARAMETERS_INPUT}" | head -c 500 | sed 's/^/  /' || echo "  Unable to preview input"
-        if [[ ${#PARAMETERS_INPUT} -gt 500 ]]; then
-          echo "  ... (truncated)"
-        fi
-        echo "::endgroup::"
-        
-        echo "✅ JSON syntax already validated for input source"
-        
-        echo "✅ Structure already validated for input source"
-        
-        # Get parameter count from the data file
-        PARAM_COUNT=$(jq 'length' "${PARAMETERS_DATA_FILE}")
-        echo "📊 Total parameters: ${PARAM_COUNT}"
-        
-        if [[ "${PARAM_COUNT}" -eq 0 ]]; then
-          echo "⚠️ Parameters data is an empty array"
-          echo "✅ Structure is valid but no parameters defined"
-          
-          echo "result=success" >> $GITHUB_OUTPUT
-          echo "parameters-count=0" >> $GITHUB_OUTPUT
-          echo "message=Parameters are valid but empty" >> $GITHUB_OUTPUT
-          echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-          echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        # Advanced validation and analysis
-        echo "::group::📊 Parameters Analysis"
-        
-        # Display parameter keys and values on successful validation
-        echo "📋 Parameters Summary:"
-        echo "  Total parameters: ${PARAM_COUNT}"
-        echo "  Source: input"
-        echo ""
-        
-        # Extract and display all parameters with their keys and values
-        echo "📝 Parameter Details:"
-        if jq -r '.[] | "  🔑 \(.ParameterName): \(.ParameterValue)"' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-summary.txt 2>/dev/null; then
-          cat validation-output/parameters/parameters-summary.txt
-        else
-          echo "  ⚠️ Unable to extract parameter details"
-        fi
-        
-        # Create processed JSON for potential use by other steps
-        if jq '[.[] | {key: .ParameterName, value: .ParameterValue}]' "${PARAMETERS_DATA_FILE}" > validation-output/parameters/parameters-processed.json 2>/dev/null; then
-          echo "📄 Processed parameters saved to validation-output/parameters/parameters-processed.json"
-        fi
-        
-        # Check for duplicate parameter keys
-        echo "🔍 Checking for duplicate parameter names..."
-        local duplicate_keys=""
-        if duplicate_keys=$(jq -r '[.[].ParameterName] | group_by(.) | map(select(length > 1)) | flatten | unique | .[]?' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-          if [[ -n "${duplicate_keys}" ]]; then
-            echo ""
-            echo "⚠️ Warning: Duplicate parameter names found:"
-            local dup_count=0
-            while IFS= read -r dup_key; do
-              [[ -z "${dup_key}" ]] && continue
-              echo "  - ${dup_key}"
-              ((dup_count++))
-            done <<< "${duplicate_keys}"
-            
-            local dup_keys_list=$(echo "${duplicate_keys}" | tr '\n' ', ' | sed 's/,$//')
-            echo "::warning title=Duplicate Parameter Names::Found ${dup_count} duplicate parameter names: ${dup_keys_list}"
-          else
-            echo "✅ No duplicate parameter names found"
-          fi
-        else
-          echo "⚠️ Unable to check for duplicate names"
-        fi
-        
-        # Check for empty parameter values
-        echo "🔍 Checking for empty parameter values..."
-        local empty_values=""
-        if empty_values=$(jq -r '.[] | select(.ParameterValue == "") | .ParameterName' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-          if [[ -n "${empty_values}" ]]; then
-            echo "⚠️ Warning: Parameters with empty values found:"
-            while IFS= read -r empty_key; do
-              [[ -z "${empty_key}" ]] && continue
-              echo "  - ${empty_key}"
-            done <<< "${empty_values}"
-            
-            local empty_keys_list=$(echo "${empty_values}" | tr '\n' ', ' | sed 's/,$//')
-            echo "::warning title=Empty Parameter Values::Parameters with empty values: ${empty_keys_list}"
-          else
-            echo "✅ No empty parameter values found"
-          fi
-        fi
-        
-        # Generate parameter statistics
-        echo "📊 Parameter Statistics:"
-        local avg_key_length=$(jq -r '[.[].ParameterName | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-        local avg_value_length=$(jq -r '[.[].ParameterValue | length] | add / length | floor' "${PARAMETERS_DATA_FILE}" 2>/dev/null || echo "unknown")
-        echo "  Average name length: ${avg_key_length} characters"
-        echo "  Average value length: ${avg_value_length} characters"
-        
-        echo "::endgroup::"
-        
-        echo "⏱️ Parameters validation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        
-        # Set success outputs
-        echo "result=success" >> $GITHUB_OUTPUT
-        echo "parameters-count=${PARAM_COUNT}" >> $GITHUB_OUTPUT
-        echo "parameters-path=${PARAMETERS_DATA_FILE}" >> $GITHUB_OUTPUT
-        echo "message=${PARAM_COUNT} parameters validated successfully from input" >> $GITHUB_OUTPUT
-        echo "validation-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-        
-        # Export parameter keys for potential use in summary
-        local param_keys=""
-        if param_keys=$(jq -r '[.[].ParameterName] | join(", ")' "${PARAMETERS_DATA_FILE}" 2>/dev/null); then
-          echo "parameter-keys=${param_keys}" >> $GITHUB_OUTPUT
-        else
-          echo "parameter-keys=" >> $GITHUB_OUTPUT
-        fi
+    #       $(if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
+    #         echo "### ❌ Failure Summary"
+    #         for reason in "${FAILURE_REASONS[@]}"; do
+    #           echo "- ${reason}"
+    #         done
+    #         echo ""
+    #       fi)
 
-    - name: Generate validation summary
-      id: summary
-      if: always()
-      shell: bash
-      run: |
-        set -euo pipefail
-        
-        # Enable detailed logging
-        echo "::group::🔧 Debug Information"
-        echo "📊 Starting validation summary generation"
-        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "🔧 Summary generation always runs regardless of previous step results"
-        echo "::endgroup::"
-        
-        echo "📊 Generating comprehensive validation summary..."
-        
-        # Read validation results from previous steps with error handling
-        echo "::group::📋 Collecting Validation Results"
-        
-        MAIN_RESULT="${{ steps.main-validation.outputs.result }}"
-        NESTED_RESULT="${{ steps.nested-validation.outputs.result }}"
-        PARAMETERS_RESULT="${{ steps.parameters-validation.outputs.result }}"
-        
-        echo "🔍 Main template result: ${MAIN_RESULT:-"not available"}"
-        echo "🔍 Nested templates result: ${NESTED_RESULT:-"not available"}"
-        echo "🔍 Parameters result: ${PARAMETERS_RESULT:-"not available"}"
-        
-        # Get file paths with fallbacks
-        TEMPLATE_PATH="${{ steps.main-validation.outputs.template-path }}"
-        PARAMETERS_PATH="${{ steps.parameters-validation.outputs.parameters-path }}"
-        
-        echo "📄 Template path: ${TEMPLATE_PATH:-"not available"}"
-        echo "📄 Parameters path: ${PARAMETERS_PATH:-"not available"}"
-        
-        # Get timestamps for tracking
-        MAIN_TIMESTAMP="${{ steps.main-validation.outputs.validation-timestamp }}"
-        NESTED_TIMESTAMP="${{ steps.nested-validation.outputs.validation-timestamp }}"
-        PARAMETERS_TIMESTAMP="${{ steps.parameters-validation.outputs.validation-timestamp }}"
-        
-        echo "⏱️ Main validation timestamp: ${MAIN_TIMESTAMP:-"not available"}"
-        echo "⏱️ Nested validation timestamp: ${NESTED_TIMESTAMP:-"not available"}"
-        echo "⏱️ Parameters validation timestamp: ${PARAMETERS_TIMESTAMP:-"not available"}"
-        
-        echo "::endgroup::"
-        
-        # Determine overall validation result with comprehensive logic
-        echo "::group::🎯 Determining Overall Result"
-        
-        OVERALL_RESULT="success"
-        FAILURE_REASONS=()
-        
-        # Check each validation step
-        if [[ "${MAIN_RESULT}" == "failure" ]]; then
-          OVERALL_RESULT="failure"
-          FAILURE_REASONS+=("Main template validation failed")
-          echo "❌ Main template validation failed"
-        elif [[ "${MAIN_RESULT}" == "success" ]]; then
-          echo "✅ Main template validation succeeded"
-        elif [[ -z "${MAIN_RESULT}" ]]; then
-          OVERALL_RESULT="failure"
-          FAILURE_REASONS+=("Main template validation did not complete")
-          echo "❓ Main template validation did not complete"
-        fi
-        
-        if [[ "${NESTED_RESULT}" == "failure" ]]; then
-          OVERALL_RESULT="failure"
-          FAILURE_REASONS+=("Nested templates validation failed")
-          echo "❌ Nested templates validation failed"
-        elif [[ "${NESTED_RESULT}" == "success" ]]; then
-          echo "✅ Nested templates validation succeeded"
-        elif [[ "${NESTED_RESULT}" == "skipped" ]]; then
-          echo "⏭️ Nested templates validation was skipped"
-        fi
-        
-        if [[ "${PARAMETERS_RESULT}" == "failure" ]]; then
-          OVERALL_RESULT="failure"
-          FAILURE_REASONS+=("Parameters validation failed")
-          echo "❌ Parameters validation failed"
-        elif [[ "${PARAMETERS_RESULT}" == "success" ]]; then
-          echo "✅ Parameters validation succeeded"
-        elif [[ "${PARAMETERS_RESULT}" == "skipped" ]]; then
-          echo "⏭️ Parameters validation was skipped"
-        fi
-        
-        echo "🎯 Overall result: ${OVERALL_RESULT}"
-        if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
-          echo "📋 Failure reasons:"
-          for reason in "${FAILURE_REASONS[@]}"; do
-            echo "  - ${reason}"
-          done
-        fi
-        
-        echo "::endgroup::"
-        
-        # Generate status indicators with error handling
-        get_status_indicator() {
-          case "$1" in
-            "success") echo "✅" ;;
-            "failure") echo "❌" ;;
-            "skipped") echo "⏭️" ;;
-            "") echo "❓" ;;
-            *) echo "❓" ;;
-          esac
-        }
-        
-        MAIN_ICON=$(get_status_indicator "${MAIN_RESULT}")
-        NESTED_ICON=$(get_status_indicator "${NESTED_RESULT}")
-        PARAMETERS_ICON=$(get_status_indicator "${PARAMETERS_RESULT}")
-        OVERALL_ICON=$(get_status_indicator "${OVERALL_RESULT}")
-        
-        echo "🎨 Status icons: Main=${MAIN_ICON}, Nested=${NESTED_ICON}, Parameters=${PARAMETERS_ICON}, Overall=${OVERALL_ICON}"
-        
-        # Validate that GITHUB_STEP_SUMMARY is available
-        if [[ -z "${GITHUB_STEP_SUMMARY:-}" ]]; then
-          echo "::warning::GITHUB_STEP_SUMMARY environment variable is not set, summary will not be displayed"
-          echo "📄 Summary would have been written to GitHub step summary"
-        else
-          echo "📝 Writing summary to: ${GITHUB_STEP_SUMMARY}"
-        fi
-        
-        # Create comprehensive markdown summary for GitHub step summary
-        echo "::group::📝 Generating Markdown Summary"
-        
-        # Function to safely write to step summary
-        write_to_summary() {
-          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-            cat >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Summary content (would be written to GitHub step summary):"
-            cat
-          fi
-        }
-        
-        # Generate the main summary
-        write_to_summary << EOF
-          # ${OVERALL_ICON} CloudFormation Validation Summary
+    #       | Validation Type | Status | Result | Details |
+    #       |---|---|---|---|
+    #       | **CloudFormation Template** | ${ICON} | **${RESULT^^}** | \`${TEMPLATE_PATH:-"N/A"}\` |
 
-          ## Overall Result: **${OVERALL_RESULT^^}**
 
-          $(if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
-            echo "### ❌ Failure Summary"
-            for reason in "${FAILURE_REASONS[@]}"; do
-              echo "- ${reason}"
-            done
-            echo ""
-          fi)
+    #       ---
 
-          | Validation Type | Status | Result | Details |
-          |---|---|---|---|
-          | **Main Template** | ${MAIN_ICON} | **${MAIN_RESULT^^}** | \`${TEMPLATE_PATH:-"N/A"}\` |
-          | **Nested Templates** | ${NESTED_ICON} | **${NESTED_RESULT^^}** | ${{ steps.nested-validation.outputs.message || 'N/A' }} |
-          | **Parameters File** | ${PARAMETERS_ICON} | **${PARAMETERS_RESULT^^}** | \`${PARAMETERS_PATH:-"N/A"}\` |
+    #       ## Validation Details
 
-          ---
-
-          ## Validation Details
-
-          ### ${MAIN_ICON} Main Template Validation
-          - **File**: \`${TEMPLATE_PATH:-"Not specified"}\`
-          - **Status**: ${MAIN_RESULT^^}
-          $(if [[ -n "${MAIN_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${MAIN_TIMESTAMP}"; fi)
-          EOF
+    #       ### ${MAIN_ICON} Main Template Validation
+    #       - **File**: \`${TEMPLATE_PATH:-"Not specified"}\`
+    #       - **Status**: ${RESULT^^}
+    #       $(if [[ -n "${MAIN_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${MAIN_TIMESTAMP}"; fi)
+    #       EOF
                   
-                  # Add main template error details if failed
-                  if [[ "${MAIN_RESULT}" == "failure" ]]; then
-                    MAIN_ERROR="${{ steps.main-validation.outputs.error }}"
-                    write_to_summary << EOF
-          - **Error**: ${MAIN_ERROR:-"Unknown error"}
-          EOF
-        fi
+    #               # Add main template error details if failed
+    #               if [[ "${RESULT}" == "failure" ]]; then
+    #                 MAIN_ERROR="${{ steps.validation.outputs.error }}"
+    #                 write_to_summary << EOF
+    #       - **Error**: ${MAIN_ERROR:-"Unknown error"}
+    #       EOF
+    #     fi
         
-        # Add nested templates details with comprehensive information
-        write_to_summary << EOF
+    #     # Add nested templates details with comprehensive information
+    #     write_to_summary << EOF
 
-        ### ${NESTED_ICON} Nested Templates Validation
-        - **Status**: ${NESTED_RESULT^^}
-        $(if [[ -n "${NESTED_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${NESTED_TIMESTAMP}"; fi)
-        EOF
+    #     ### ${NESTED_ICON} Nested Templates Validation
+    #     - **Status**: ${NESTED_RESULT^^}
+    #     $(if [[ -n "${NESTED_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${NESTED_TIMESTAMP}"; fi)
+    #     EOF
                 
-                if [[ "${NESTED_RESULT}" == "success" ]]; then
-                  VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
-                  SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
-                  write_to_summary << EOF
-        - **Templates Validated**: ${VALIDATED_COUNT:-"0"}
-        $(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
-        - **Result**: All nested templates validated successfully
-        EOF
-                elif [[ "${NESTED_RESULT}" == "failure" ]]; then
-                  VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
-                  FAILED_COUNT="${{ steps.nested-validation.outputs.failed-count }}"
-                  SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
-                  FAILED_TEMPLATES="${{ steps.nested-validation.outputs.failed-templates }}"
-                  write_to_summary << EOF
-        - **Templates Validated**: ${VALIDATED_COUNT:-"0"}
-        - **Templates Failed**: ${FAILED_COUNT:-"0"}
-        $(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
-        - **Failed Templates**: ${FAILED_TEMPLATES:-"Unknown"}
-        EOF
-                else
-                  NESTED_MESSAGE="${{ steps.nested-validation.outputs.message }}"
-                  write_to_summary << EOF
-        - **Result**: ${NESTED_MESSAGE:-"Nested templates validation was skipped"}
-        EOF
-                fi
+    #             if [[ "${NESTED_RESULT}" == "success" ]]; then
+    #               VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
+    #               SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
+    #               write_to_summary << EOF
+    #     - **Templates Validated**: ${VALIDATED_COUNT:-"0"}
+    #     $(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
+    #     - **Result**: All nested templates validated successfully
+    #     EOF
+    #             elif [[ "${NESTED_RESULT}" == "failure" ]]; then
+    #               VALIDATED_COUNT="${{ steps.nested-validation.outputs.validated-count }}"
+    #               FAILED_COUNT="${{ steps.nested-validation.outputs.failed-count }}"
+    #               SKIPPED_COUNT="${{ steps.nested-validation.outputs.skipped-count }}"
+    #               FAILED_TEMPLATES="${{ steps.nested-validation.outputs.failed-templates }}"
+    #               write_to_summary << EOF
+    #     - **Templates Validated**: ${VALIDATED_COUNT:-"0"}
+    #     - **Templates Failed**: ${FAILED_COUNT:-"0"}
+    #     $(if [[ -n "${SKIPPED_COUNT}" ]] && [[ "${SKIPPED_COUNT}" != "0" ]]; then echo "- **Templates Skipped**: ${SKIPPED_COUNT}"; fi)
+    #     - **Failed Templates**: ${FAILED_TEMPLATES:-"Unknown"}
+    #     EOF
+    #             else
+    #               NESTED_MESSAGE="${{ steps.nested-validation.outputs.message }}"
+    #               write_to_summary << EOF
+    #     - **Result**: ${NESTED_MESSAGE:-"Nested templates validation was skipped"}
+    #     EOF
+    #             fi
                 
-                # Add parameters file details with comprehensive information
-                write_to_summary << EOF
+    #             # Add parameters file details with comprehensive information
+    #             write_to_summary << EOF
 
-        ### ${PARAMETERS_ICON} Parameters File Validation
-        - **File**: \`${PARAMETERS_PATH:-"Not specified"}\`
-        - **Status**: ${PARAMETERS_RESULT^^}
-        $(if [[ -n "${PARAMETERS_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${PARAMETERS_TIMESTAMP}"; fi)
-        EOF
+    #     ### ${PARAMETERS_ICON} Parameters File Validation
+    #     - **File**: \`${PARAMETERS_PATH:-"Not specified"}\`
+    #     - **Status**: ${PARAMETERS_RESULT^^}
+    #     $(if [[ -n "${PARAMETERS_TIMESTAMP}" ]]; then echo "- **Timestamp**: ${PARAMETERS_TIMESTAMP}"; fi)
+    #     EOF
                 
-                if [[ "${PARAMETERS_RESULT}" == "success" ]]; then
-                  PARAM_COUNT="${{ steps.parameters-validation.outputs.parameters-count }}"
-                  PARAM_KEYS="${{ steps.parameters-validation.outputs.parameter-keys }}"
-                  write_to_summary << EOF
-        - **Parameters Count**: ${PARAM_COUNT:-"0"}
-        EOF
-                  if [[ -n "${PARAM_KEYS}" ]] && [[ "${PARAM_KEYS}" != "" ]]; then
-                    # Truncate parameter keys if too long for summary
-                    if [[ ${#PARAM_KEYS} -gt 200 ]]; then
-                      TRUNCATED_KEYS="${PARAM_KEYS:0:200}..."
-                      write_to_summary << EOF
-        - **Parameter Keys**: ${TRUNCATED_KEYS}
-        EOF
-                    else
-                      write_to_summary << EOF
-        - **Parameter Keys**: ${PARAM_KEYS}
-        EOF
-                    fi
-                  fi
-                elif [[ "${PARAMETERS_RESULT}" == "failure" ]]; then
-                  PARAM_ERROR="${{ steps.parameters-validation.outputs.error }}"
-                  write_to_summary << EOF
-        - **Error**: ${PARAM_ERROR:-"Unknown error"}
-        EOF
-                else
-                  PARAM_MESSAGE="${{ steps.parameters-validation.outputs.message }}"
-                  write_to_summary << EOF
-        - **Result**: ${PARAM_MESSAGE:-"Parameters validation was skipped"}
-        EOF
-                fi
+    #             if [[ "${PARAMETERS_RESULT}" == "success" ]]; then
+    #               PARAM_COUNT="${{ steps.parameters-validation.outputs.parameters-count }}"
+    #               PARAM_KEYS="${{ steps.parameters-validation.outputs.parameter-keys }}"
+    #               write_to_summary << EOF
+    #     - **Parameters Count**: ${PARAM_COUNT:-"0"}
+    #     EOF
+    #               if [[ -n "${PARAM_KEYS}" ]] && [[ "${PARAM_KEYS}" != "" ]]; then
+    #                 # Truncate parameter keys if too long for summary
+    #                 if [[ ${#PARAM_KEYS} -gt 200 ]]; then
+    #                   TRUNCATED_KEYS="${PARAM_KEYS:0:200}..."
+    #                   write_to_summary << EOF
+    #     - **Parameter Keys**: ${TRUNCATED_KEYS}
+    #     EOF
+    #                 else
+    #                   write_to_summary << EOF
+    #     - **Parameter Keys**: ${PARAM_KEYS}
+    #     EOF
+    #                 fi
+    #               fi
+    #             elif [[ "${PARAMETERS_RESULT}" == "failure" ]]; then
+    #               PARAM_ERROR="${{ steps.parameters-validation.outputs.error }}"
+    #               write_to_summary << EOF
+    #     - **Error**: ${PARAM_ERROR:-"Unknown error"}
+    #     EOF
+    #             else
+    #               PARAM_MESSAGE="${{ steps.parameters-validation.outputs.message }}"
+    #               write_to_summary << EOF
+    #     - **Result**: ${PARAM_MESSAGE:-"Parameters validation was skipped"}
+    #     EOF
+    #             fi
                 
-                # Add comprehensive footer with artifact and configuration information
-                write_to_summary << EOF
+    #             # Add comprehensive footer with artifact and configuration information
+    #             write_to_summary << EOF
 
-        ---
+    #     ---
 
-        ## 📁 Artifacts
+    #     ## 📁 Artifacts
 
-        Detailed validation results and logs have been uploaded as artifacts:
-        - **Artifact Name**: \`cloudformation-validation-results-${{ github.run_id }}\`
-        - **Retention**: 30 days
-        - **Contents**: Validation output files, error logs, and detailed results
+    #     Detailed validation results and logs have been uploaded as artifacts:
+    #     - **Artifact Name**: \`cloudformation-validation-results-${{ github.run_id }}\`
+    #     - **Retention**: 30 days
+    #     - **Contents**: Validation output files, error logs, and detailed results
 
-        ## 🔧 Action Configuration
+    #     ## 🔧 Action Configuration
 
-        | Input | Value |
-        |---|---|
-        | **CloudFormation Directory** | \`${{ inputs.cloudformation-dir }}\` |
-        | **Template File** | \`${{ inputs.template-file }}\` |
-        | **AWS Region** | \`${{ inputs.aws-region }}\` |
-        | **AWS Role ARN** | \`${{ inputs.aws-role-arn }}\` |
+    #     | Input | Value |
+    #     |---|---|
+    #     | **CloudFormation Directory** | \`${{ inputs.cloudformation-dir }}\` |
+    #     | **Template File** | \`${{ inputs.template-file }}\` |
+    #     | **AWS Region** | \`${{ inputs.aws-region }}\` |
+    #     | **AWS Role ARN** | \`${{ inputs.aws-role-arn }}\` |
 
-        ## 📊 Execution Summary
+    #     ## 📊 Execution Summary
 
-        - **Workflow Run ID**: ${{ github.run_id }}
-        - **Summary Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        - **Repository**: ${{ github.repository }}
-        - **Branch/Ref**: ${{ github.ref }}
+    #     - **Workflow Run ID**: ${{ github.run_id }}
+    #     - **Summary Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+    #     - **Repository**: ${{ github.repository }}
+    #     - **Branch/Ref**: ${{ github.ref }}
 
-        $(if [[ "${OVERALL_RESULT}" == "failure" ]]; then
-          echo "## 🔧 Troubleshooting"
-          echo ""
-          echo "The validation failed. Check the detailed logs above and the uploaded artifacts for more information."
-          echo ""
-          echo "### Common Issues:"
-          echo "- **Template Syntax Errors**: Check your CloudFormation template syntax"
-          echo "- **AWS Authentication**: Verify your AWS credentials and IAM permissions"
-          echo "- **File Paths**: Ensure template and parameter files exist at the specified paths"
-          echo "- **JSON Format**: Verify parameters file is valid JSON with correct structure"
-        fi)
-        EOF
+    #     $(if [[ "${OVERALL_RESULT}" == "failure" ]]; then
+    #       echo "## 🔧 Troubleshooting"
+    #       echo ""
+    #       echo "The validation failed. Check the detailed logs above and the uploaded artifacts for more information."
+    #       echo ""
+    #       echo "### Common Issues:"
+    #       echo "- **Template Syntax Errors**: Check your CloudFormation template syntax"
+    #       echo "- **AWS Authentication**: Verify your AWS credentials and IAM permissions"
+    #       echo "- **File Paths**: Ensure template and parameter files exist at the specified paths"
+    #       echo "- **JSON Format**: Verify parameters file is valid JSON with correct structure"
+    #     fi)
+    #     EOF
         
-        echo "✅ Markdown summary generated successfully"
-        echo "::endgroup::"
+    #     echo "✅ Markdown summary generated successfully"
+    #     echo "::endgroup::"
         
-        # Set output for overall validation result with error handling
-        echo "::group::📤 Setting Outputs"
+    #     # Set output for overall validation result with error handling
+    #     echo "::group::📤 Setting Outputs"
         
-        if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-          echo "validation-result=${OVERALL_RESULT}" >> "$GITHUB_OUTPUT"
-          echo "summary-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
-          echo "failure-count=${#FAILURE_REASONS[@]}" >> "$GITHUB_OUTPUT"
+    #     if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    #       echo "validation-result=${OVERALL_RESULT}" >> "$GITHUB_OUTPUT"
+    #       echo "summary-timestamp=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
+    #       echo "failure-count=${#FAILURE_REASONS[@]}" >> "$GITHUB_OUTPUT"
           
-          # Export failure reasons as a comma-separated string
-          if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
-            IFS=','
-            FAILURE_REASONS_STR="${FAILURE_REASONS[*]}"
-            unset IFS
-            echo "failure-reasons=${FAILURE_REASONS_STR}" >> "$GITHUB_OUTPUT"
-          fi
+    #       # Export failure reasons as a comma-separated string
+    #       if [[ ${#FAILURE_REASONS[@]} -gt 0 ]]; then
+    #         IFS=','
+    #         FAILURE_REASONS_STR="${FAILURE_REASONS[*]}"
+    #         unset IFS
+    #         echo "failure-reasons=${FAILURE_REASONS_STR}" >> "$GITHUB_OUTPUT"
+    #       fi
           
-          echo "✅ Outputs set successfully"
-        else
-          echo "::warning::GITHUB_OUTPUT environment variable is not set"
-          echo "📤 Would have set validation-result=${OVERALL_RESULT}"
-        fi
+    #       echo "✅ Outputs set successfully"
+    #     else
+    #       echo "::warning::GITHUB_OUTPUT environment variable is not set"
+    #       echo "📤 Would have set validation-result=${OVERALL_RESULT}"
+    #     fi
         
-        echo "::endgroup::"
+    #     echo "::endgroup::"
         
-        # Final status report
-        if [[ "${OVERALL_RESULT}" == "success" ]]; then
-          echo "🎉 Validation summary generated successfully! All validations passed."
-        else
-          echo "📋 Validation summary generated successfully. Some validations failed - check details above."
-        fi
+    #     # Final status report
+    #     if [[ "${OVERALL_RESULT}" == "success" ]]; then
+    #       echo "🎉 Validation summary generated successfully! All validations passed."
+    #     else
+    #       echo "📋 Validation summary generated successfully. Some validations failed - check details above."
+    #     fi
         
-        echo "⏱️ Summary generation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     echo "⏱️ Summary generation completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
-    - name: Upload validation artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: cloudformation-validation-results-${{ github.run_id }}
-        path: |
-          validation-output/
-        retention-days: 30
-        compression-level: 6
-        if-no-files-found: warn
-      env:
-        # Ensure artifact upload has proper timeout and retry behavior
-        ACTIONS_STEP_DEBUG: ${{ runner.debug }}
-      continue-on-error: true
-      id: upload-artifacts
+    # - name: Upload validation artifacts
+    #   uses: actions/upload-artifact@v4
+    #   if: always()
+    #   with:
+    #     name: cloudformation-validation-results-${{ github.run_id }}
+    #     path: |
+    #       validation-output/
+    #     retention-days: 30
+    #     compression-level: 6
+    #     if-no-files-found: warn
+    #   env:
+    #     # Ensure artifact upload has proper timeout and retry behavior
+    #     ACTIONS_STEP_DEBUG: ${{ runner.debug }}
+    #   continue-on-error: true
+    #   id: upload-artifacts
       
-    - name: Verify artifact upload
-      if: always()
-      shell: bash
-      run: |
-        set -euo pipefail
+    # - name: Verify artifact upload
+    #   if: always()
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
         
-        echo "::group::📁 Artifact Upload Verification"
-        echo "🔍 Verifying artifact upload status"
-        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    #     echo "::group::📁 Artifact Upload Verification"
+    #     echo "🔍 Verifying artifact upload status"
+    #     echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         
-        # Check if validation-output directory exists and has content
-        if [[ -d "validation-output" ]]; then
-          echo "✅ Validation output directory exists"
+    #     # Check if validation-output directory exists and has content
+    #     if [[ -d "validation-output" ]]; then
+    #       echo "✅ Validation output directory exists"
           
-          # Count files in validation-output
-          FILE_COUNT=$(find validation-output -type f | wc -l | tr -d ' ')
-          echo "📊 Total files in validation-output: ${FILE_COUNT}"
+    #       # Count files in validation-output
+    #       FILE_COUNT=$(find validation-output -type f | wc -l | tr -d ' ')
+    #       echo "📊 Total files in validation-output: ${FILE_COUNT}"
           
-          if [[ "${FILE_COUNT}" -gt 0 ]]; then
-            echo "📋 Validation output contents:"
-            find validation-output -type f -exec ls -lh {} \; | sed 's/^/  /'
+    #       if [[ "${FILE_COUNT}" -gt 0 ]]; then
+    #         echo "📋 Validation output contents:"
+    #         find validation-output -type f -exec ls -lh {} \; | sed 's/^/  /'
             
-            # Calculate total size
-            TOTAL_SIZE=$(du -sh validation-output 2>/dev/null | cut -f1 || echo "unknown")
-            echo "📏 Total validation output size: ${TOTAL_SIZE}"
+    #         # Calculate total size
+    #         TOTAL_SIZE=$(du -sh validation-output 2>/dev/null | cut -f1 || echo "unknown")
+    #         echo "📏 Total validation output size: ${TOTAL_SIZE}"
             
-            # Show directory structure
-            echo "🌳 Directory structure:"
-            tree validation-output 2>/dev/null || find validation-output -type d | sed 's/^/  /' || echo "  Unable to show directory structure"
+    #         # Show directory structure
+    #         echo "🌳 Directory structure:"
+    #         tree validation-output 2>/dev/null || find validation-output -type d | sed 's/^/  /' || echo "  Unable to show directory structure"
             
-          else
-            echo "⚠️ Warning: Validation output directory is empty"
-            echo "::warning::No validation output files were generated"
-          fi
-        else
-          echo "❌ Validation output directory does not exist"
-          echo "::warning::Validation output directory was not created"
-        fi
+    #       else
+    #         echo "⚠️ Warning: Validation output directory is empty"
+    #         echo "::warning::No validation output files were generated"
+    #       fi
+    #     else
+    #       echo "❌ Validation output directory does not exist"
+    #       echo "::warning::Validation output directory was not created"
+    #     fi
         
-        # Check artifact upload step result
-        UPLOAD_OUTCOME="${{ steps.upload-artifacts.outcome }}"
-        echo "📤 Artifact upload outcome: ${UPLOAD_OUTCOME:-"not available"}"
+    #     # Check artifact upload step result
+    #     UPLOAD_OUTCOME="${{ steps.upload-artifacts.outcome }}"
+    #     echo "📤 Artifact upload outcome: ${UPLOAD_OUTCOME:-"not available"}"
         
-        case "${UPLOAD_OUTCOME}" in
-          "success")
-            echo "✅ Artifacts uploaded successfully"
-            echo "🔗 Artifact name: cloudformation-validation-results-${{ github.run_id }}"
-            echo "⏳ Retention: 30 days"
-            ;;
-          "failure")
-            echo "❌ Artifact upload failed"
-            echo "::error::Failed to upload validation artifacts"
-            ;;
-          "skipped")
-            echo "⏭️ Artifact upload was skipped"
-            echo "::warning::Artifact upload was skipped"
-            ;;
-          *)
-            echo "❓ Unknown artifact upload status: ${UPLOAD_OUTCOME}"
-            echo "::warning::Unknown artifact upload status"
-            ;;
-        esac
+    #     case "${UPLOAD_OUTCOME}" in
+    #       "success")
+    #         echo "✅ Artifacts uploaded successfully"
+    #         echo "🔗 Artifact name: cloudformation-validation-results-${{ github.run_id }}"
+    #         echo "⏳ Retention: 30 days"
+    #         ;;
+    #       "failure")
+    #         echo "❌ Artifact upload failed"
+    #         echo "::error::Failed to upload validation artifacts"
+    #         ;;
+    #       "skipped")
+    #         echo "⏭️ Artifact upload was skipped"
+    #         echo "::warning::Artifact upload was skipped"
+    #         ;;
+    #       *)
+    #         echo "❓ Unknown artifact upload status: ${UPLOAD_OUTCOME}"
+    #         echo "::warning::Unknown artifact upload status"
+    #         ;;
+    #     esac
         
-        # Provide guidance for accessing artifacts
-        if [[ "${UPLOAD_OUTCOME}" == "success" ]]; then
-          echo ""
-          echo "💡 To access the uploaded artifacts:"
-          echo "  1. Go to the Actions tab in your GitHub repository"
-          echo "  2. Click on this workflow run"
-          echo "  3. Scroll down to the 'Artifacts' section"
-          echo "  4. Download 'cloudformation-validation-results-${{ github.run_id }}'"
-        fi
+    #     # Provide guidance for accessing artifacts
+    #     if [[ "${UPLOAD_OUTCOME}" == "success" ]]; then
+    #       echo ""
+    #       echo "💡 To access the uploaded artifacts:"
+    #       echo "  1. Go to the Actions tab in your GitHub repository"
+    #       echo "  2. Click on this workflow run"
+    #       echo "  3. Scroll down to the 'Artifacts' section"
+    #       echo "  4. Download 'cloudformation-validation-results-${{ github.run_id }}'"
+    #     fi
         
-        echo "::endgroup::"
+    #     echo "::endgroup::"
