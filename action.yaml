@@ -133,7 +133,7 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        INPUT_JSON=$(echo "$INPUT_STRING" \
+        INPUT_JSON=$(echo "${{ inputs.parameters }}" \
                 | sed -E 's/([{,])([a-zA-Z0-9_]+):/\1"\2":/g' \
                 | sed -E 's/:([a-zA-Z0-9_\-]+)/:"\1"/g' \
                 | jq 'map({ (."ParameterName"): ."ParameterValue" }) | add')
