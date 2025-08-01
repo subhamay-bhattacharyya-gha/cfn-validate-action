@@ -170,16 +170,25 @@ runs:
         if [[ -s "$SUMMARY_FILE_SUCCESS" ]]; then
           SUMMARY_MARKDOWN+="✅ **Validation Passed**\n\n"
           SUMMARY_MARKDOWN+="<details><summary>📄 Validation Output (click to expand)</summary>\n\n\`\`\`json\n"
-          SUMMARY_MARKDOWN+="$(cat "$SUMMARY_FILE_SUCCESS")"
+          SUMMARY_MARKDOWN+=$(<"$SUMMARY_FILE_SUCCESS")
           SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
           echo "validation-result=success" >> "$GITHUB_OUTPUT"
 
         elif [[ -s "$SUMMARY_FILE_ERRORS" ]]; then
           SUMMARY_MARKDOWN+="❌ **Validation Failed**\n\n"
           SUMMARY_MARKDOWN+="<details><summary>🚫 Error Log (click to expand)</summary>\n\n\`\`\`text\n"
-          SUMMARY_MARKDOWN+="$(cat "$SUMMARY_FILE_ERRORS")"
+          SUMMARY_MARKDOWN+=$(<"$SUMMARY_FILE_ERRORS")
           SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
-          echo "va
+          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+        else
+          SUMMARY_MARKDOWN+="⚠️ **No validation output or errors found** — unexpected state\n"
+          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "::endgroup::"
+
+        # Write Markdown summary to GitHub Action summary panel
+        echo -e "$SUMMARY_MARKDOWN" >> "$GITHUB_STEP_SUMMARY"
 
 
         
