@@ -1,51 +1,59 @@
-# Requirements Document
+# Requirements Document - DEPRECATED
 
-## Introduction
+## Status: FEATURE REMOVED
 
-This feature enhances the CloudFormation Template Validator action to accept CloudFormation parameters directly as input instead of requiring a separate parameters.json file. This provides more flexibility for users who want to pass parameters dynamically from their workflow without creating intermediate files.
+This specification is now **DEPRECATED** as the parameter input enhancement feature has been removed from the CloudFormation Template Validator action.
 
-## Requirements
+## Decision Rationale
 
-### Requirement 1
+During implementation, it was decided to simplify the action to focus on its core functionality: CloudFormation template syntax validation. The parameter input feature was removed to:
 
-**User Story:** As a workflow author, I want to pass CloudFormation parameters directly as action input, so that I can avoid creating separate parameter files and have more dynamic parameter handling.
+1. **Simplify the action**: Focus on core CloudFormation template validation
+2. **Reduce complexity**: Remove auxiliary features that can be handled by caller workflows
+3. **Improve maintainability**: Streamline the codebase for better long-term maintenance
+4. **Clarify responsibility**: Let the action focus solely on template syntax validation
 
-#### Acceptance Criteria
+## Current Action Functionality
 
-1. WHEN a user provides parameters via the new `parameters` input THEN the action SHALL validate the parameter format
-2. WHEN parameters are provided via input THEN the action SHALL use these parameters instead of reading from a file
-3. WHEN both `parameters` input and `parameters-file` are provided THEN the action SHALL prioritize the `parameters` input and ignore the file
-4. WHEN neither `parameters` input nor `parameters-file` are provided THEN the action SHALL skip parameter validation as before
+The CloudFormation Template Validator action now provides:
 
-### Requirement 2
+- **Core template validation**: Validates CloudFormation template syntax using AWS CloudFormation API
+- **Template size validation**: Ensures templates don't exceed AWS limits (51,200 bytes for --template-body)
+- **Comprehensive error reporting**: Detailed error messages and validation summaries
+- **Artifact generation**: Validation results and logs for debugging
 
-**User Story:** As a workflow author, I want the parameter input to follow CloudFormation's standard format, so that I can easily convert existing parameter files to input format.
+## Alternative Solutions
 
-#### Acceptance Criteria
+For parameter validation needs, users can:
 
-1. WHEN parameters are provided THEN they SHALL be in the format: `[{ParameterName:string,ParameterValue:string}]`
-2. WHEN parameter format is invalid THEN the action SHALL provide clear error messages with examples
-3. WHEN parameters contain special characters THEN the action SHALL handle them correctly
-4. WHEN parameters are empty array THEN the action SHALL skip parameter validation
+1. **Use AWS CLI directly**: Validate parameters in caller workflows before template validation
+2. **Implement custom validation**: Add parameter validation steps in the workflow
+3. **Use other actions**: Leverage specialized parameter validation actions from the marketplace
 
-### Requirement 3
+## Original Requirements (For Reference)
 
-**User Story:** As a workflow author, I want backward compatibility with existing parameter files, so that I can migrate gradually without breaking existing workflows.
+The following requirements were originally specified but are no longer applicable:
 
-#### Acceptance Criteria
+### ~~Requirement 1~~ - REMOVED
 
-1. WHEN only `parameters-file` is provided THEN the action SHALL work exactly as before
-2. WHEN `parameters-file` doesn't exist and no `parameters` input is provided THEN the action SHALL skip parameter validation
-3. WHEN migrating from file to input THEN existing validation logic SHALL remain the same
-4. WHEN using the new parameter input THEN all existing outputs SHALL remain unchanged
+**User Story:** ~~As a workflow author, I want to pass CloudFormation parameters directly as action input~~
 
-### Requirement 4
+**Status:** Feature removed - parameters input no longer supported
 
-**User Story:** As a workflow author, I want clear documentation and examples, so that I can understand how to use the new parameter input feature.
+### ~~Requirement 2~~ - REMOVED  
 
-#### Acceptance Criteria
+**User Story:** ~~As a workflow author, I want the parameter input to follow CloudFormation's standard format~~
 
-1. WHEN reading documentation THEN examples SHALL show both old and new parameter methods
-2. WHEN using the new feature THEN error messages SHALL be clear and actionable
-3. WHEN parameters are invalid THEN the action SHALL show the expected format with examples
-4. WHEN debugging THEN the action SHALL log which parameter method is being used
+**Status:** Feature removed - no parameter format validation
+
+### ~~Requirement 3~~ - REMOVED
+
+**User Story:** ~~As a workflow author, I want backward compatibility with existing parameter files~~
+
+**Status:** Feature removed - no parameter file support
+
+### ~~Requirement 4~~ - REMOVED
+
+**User Story:** ~~As a workflow author, I want clear documentation and examples~~
+
+**Status:** Documentation updated to reflect simplified functionality
