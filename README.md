@@ -2,20 +2,18 @@
 
 ![Built with Kiro](https://img.shields.io/badge/Built%20with-Kiro-blue?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMTMuMDkgOC4yNkwyMCA5TDEzLjA5IDE1Ljc0TDEyIDIyTDEwLjkxIDE1Ljc0TDQgOUwxMC45MSA4LjI2TDEyIDJaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K)&nbsp;![GitHub Action](https://img.shields.io/badge/GitHub-Action-blue?logo=github)&nbsp;![Release](https://github.com/subhamay-bhattacharyya-gha/cfn-validate-action/actions/workflows/release.yaml/badge.svg)&nbsp;![Commit Activity](https://img.shields.io/github/commit-activity/t/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Bash](https://img.shields.io/badge/Language-Bash-green?logo=gnubash)&nbsp;![CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange?logo=amazonaws)&nbsp;![Last Commit](https://img.shields.io/github/last-commit/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Release Date](https://img.shields.io/github/release-date/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Repo Size](https://img.shields.io/github/repo-size/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![File Count](https://img.shields.io/github/directory-file-count/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Issues](https://img.shields.io/github/issues/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Top Language](https://img.shields.io/github/languages/top/subhamay-bhattacharyya-gha/cfn-validate-action)&nbsp;![Custom Endpoint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bsubhamay/0bcfd7d53cb4036029aa32cb81aac635/raw/cfn-validate-action.json?)
 
-A comprehensive GitHub Action that validates CloudFormation templates, nested templates, and parameters files with comprehensive error reporting and artifact generation. Requires repository checkout and AWS credentials to be configured by caller workflow.
+A comprehensive GitHub Action that validates CloudFormation templates with comprehensive error reporting and artifact generation. Requires repository checkout and AWS credentials to be configured by the caller workflow.
 
 > **Note**: This action requires the caller workflow to handle repository checkout and AWS credentials configuration. See [Prerequisites](#prerequisites) for details.
 
 ## Features
 
-- **Main Template Validation**: Validates CloudFormation template syntax using AWS CloudFormation API
-- **Nested Templates Support**: Automatically discovers and validates templates in `nested-templates` directory
-- **Parameters Input Validation**: Validates JSON structure and syntax of CloudFormation parameters provided as input
+- **CloudFormation Template Validation**: Validates CloudFormation template syntax using AWS CloudFormation API
 - **Comprehensive Error Reporting**: Detailed error messages with categorization and troubleshooting suggestions
 - **Validation Artifacts**: Uploads validation results and logs as GitHub artifacts for debugging
-- **Step Summary**: Generates markdown summary with validation status for each component
-- **Retry Logic**: Built-in retry mechanism for transient AWS API failures
+- **Step Summary**: Generates markdown summary with validation status
 - **Multiple File Formats**: Supports YAML (.yaml, .yml) and JSON (.json) template formats
+- **Template Size Validation**: Ensures templates don't exceed AWS CloudFormation limits
 
 ---
 
@@ -24,20 +22,15 @@ A comprehensive GitHub Action that validates CloudFormation templates, nested te
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
 | `cloudformation-dir` | Directory containing CloudFormation templates | No | `.` |
-| `template-file` | Main CloudFormation template filename | No | `template.yaml` |
-| `parameters` | CloudFormation parameters as JSON array string | No | `''` |
+| `template-file` | CloudFormation template filename | No | `template.yaml` |
 | `aws-region` | AWS region for validation | No | `us-east-1` |
 | `aws-role-arn` | AWS IAM role ARN for authentication | **Yes** | — |
-| `github-token` | GitHub token for artifact upload | No | `${{ github.token }}` |
 
 ## Outputs
 
 | Name | Description | Possible Values |
 |------|-------------|-----------------|
-| `validation-result` | Overall validation result | `success`, `failure` |
-| `main-template-result` | Main template validation result | `success`, `failure` |
-| `nested-templates-result` | Nested templates validation result | `success`, `failure`, `skipped` |
-| `parameters-result` | Parameters file validation result | `success`, `failure`, `skipped` |
+| `validation-result` | CloudFormation template validation result | `success`, `failure` |
 
 ---
 
@@ -88,17 +81,6 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'cloudformation'
           template-file: 'main-template.yaml'
-          parameters: |
-            [
-              {
-                "ParameterName": "Environment",
-                "ParameterValue": "production"
-              },
-              {
-                "ParameterName": "BucketName",
-                "ParameterValue": "my-cloudformation-bucket"
-              }
-            ]
           aws-region: 'us-west-2'
 ```
 
@@ -150,17 +132,6 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: ${{ matrix.template-dir }}
           template-file: 'template.yaml'
-          parameters: |
-            [
-              {
-                "ParameterName": "Environment",
-                "ParameterValue": "${{ matrix.environment }}"
-              },
-              {
-                "ParameterName": "Region",
-                "ParameterValue": "${{ matrix.aws-region }}"
-              }
-            ]
           aws-region: ${{ matrix.aws-region }}
 ```
 
@@ -200,17 +171,6 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           cloudformation-dir: 'templates'
           template-file: ${{ github.event.inputs.template-name }}
-          parameters: |
-            [
-              {
-                "ParameterName": "Environment",
-                "ParameterValue": "custom"
-              },
-              {
-                "ParameterName": "TemplateName",
-                "ParameterValue": "${{ github.event.inputs.template-name }}"
-              }
-            ]
           aws-region: 'ap-southeast-2'
 ```
 
