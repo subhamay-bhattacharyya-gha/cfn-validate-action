@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Invalid CloudFormation template with syntax errors'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'test'
+    # Missing closing quote and invalid YAML structure
+    Description: 'Environment name for resource tagging
+    AllowedValues:
+      - 'dev'
+      - 'test'
+      - 'prod'
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-test-bucket-${Environment}'
+      # Invalid property name
+      InvalidProperty: true
+      # Missing required structure
+      VersioningConfiguration
+        Status: Enabled
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        # Missing dash for list item
+        Key: Purpose
+          Value: Testing
+
+  # Invalid resource type
+  InvalidResource:
+    Type: 'AWS::NonExistent::Resource'
+    Properties:
+      SomeProperty: value
+
+Outputs:
+  BucketName:
+    Description: 'Name of the created S3 bucket'
+    # Invalid function reference
+    Value: !Ref NonExistentResource

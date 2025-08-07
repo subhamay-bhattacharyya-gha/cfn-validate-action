@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Main template for mixed nested templates test'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'test'
+    Description: 'Environment name'
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-test-bucket'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  BucketName:
+    Description: 'Test bucket name'
+    Value: !Ref TestBucket

@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "BucketName",
+    "ParameterValue": "test-bucket-12345"
+  },
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "test"
+  }
+]

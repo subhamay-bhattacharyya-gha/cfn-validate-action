@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Valid CloudFormation template for testing the validation action'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'test'
+    Description: 'Environment name for resource tagging'
+    AllowedValues:
+      - 'dev'
+      - 'test'
+      - 'prod'
+  
+  InstanceType:
+    Type: String
+    Default: 't3.micro'
+    Description: 'EC2 instance type'
+    AllowedValues:
+      - 't3.micro'
+      - 't3.small'
+      - 't3.medium'
+
+  EnableLogging:
+    Type: String
+    Default: 'true'
+    Description: 'Enable CloudWatch logging'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-test-bucket-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: Testing
+
+  TestRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-test-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  TestLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Condition: EnableLoggingCondition
+    Properties:
+      LogGroupName: !Sub '/aws/test/${AWS::StackName}'
+      RetentionInDays: 7
+
+Conditions:
+  EnableLoggingCondition: !Equals [!Ref EnableLogging, 'true']
+
+Outputs:
+  BucketName:
+    Description: 'Name of the created S3 bucket'
+    Value: !Ref TestBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+
+  RoleArn:
+    Description: 'ARN of the created IAM role'
+    Value: !GetAtt TestRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleArn'
+
+  LogGroupName:
+    Description: 'Name of the CloudWatch log group'
+    Value: !Ref TestLogGroup
+    Condition: EnableLoggingCondition
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroupName'

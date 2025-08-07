@@ -1,44 +1,187 @@
-name: 'Action Name'
-description: 'Action Description'
+name: 'CloudFormation Template Validator'
+description: 'Validates CloudFormation templates with comprehensive error reporting and artifact generation. Requires repository checkout and AWS credentials to be configured by the caller workflow.'
+author: 'Subhamay Bhattacharyya'
 
 inputs:
-  input-1:
-    description: Input description.
+  cloudformation-dir:
+    description: 'Directory containing CloudFormation templates'
     required: false
-    default: default-value
-  input-2:
-    description: Input description.
+    default: '.'
+  template-file:
+    description: 'CloudFormation template filename'
     required: false
-    default: default-value
-  input-3:
-    description: Input description.
+    default: 'template.yaml'
+  aws-region:
+    description: 'AWS region for validation'
     required: false
-    default: default-value
-  github-token:
-    description: 'GitHub token'
+    default: 'us-east-1'
+  aws-role-arn:
+    description: 'AWS IAM role ARN for authentication'
     required: true
+
+outputs:
+  validation-result:
+    description: 'Validation result (success/failure)'
+    value: ${{ steps.validate-cloudformation-template.outputs.validation-result }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: 3.x
 
-    - name: Sample step to call GitHub API
+    - name: Print Inputs for Debugging
+      id: print-inputs
       shell: bash
-      env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+      working-directory: ${{ github.workspace }}
       run: |
-        ISSUE_NUMBER="${{ github.event.issue.number }}"
-        REPO="${{ github.repository }}"
-        OWNER=$(echo $REPO | cut -d'/' -f1)
-        BRANCH_NAME="${{ steps.create-branch.outputs.branch-name }}"
-        COMMENT_BODY="Branch [$BRANCH_NAME](https://github.com/$OWNER/$REPO/tree/$BRANCH_NAME) created 🚀"
+        set -euo pipefail
 
-        curl -s -X POST \
-          -H "Authorization: token $GITHUB_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d "{\"body\": \"$COMMENT_BODY\"}" \
-          https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments
+        TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
+        TEMPLATE_FILE="${{ inputs.template-file }}"
+
+        echo "::group::🔧 Debug Information"
+        echo "🔍 Starting CloudFormation template validation"
+        echo "📅 Timestamp                : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "📁 Working Directory        : $(pwd)"
+        echo "📁 CloudFormation Directory : $TEMPLATE_DIR"
+        echo "📁 Template file            : $TEMPLATE_FILE"
+        echo "🌍 AWS Region               : ${{ inputs.aws-region }}"
+        echo "🔑 AWS CLI Version          : $(aws --version 2>&1 || echo 'AWS CLI not available')"
+        echo "::endgroup::"
+
+    - name: Validate CloudFormation directory and template
+      id: validate-directory-template
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+
+        TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
+        TEMPLATE_FILE="${{ inputs.template-file }}"
+
+        # Use template-file directly if it includes a slash or is absolute
+        if [[ "$TEMPLATE_FILE" = /* || "$TEMPLATE_FILE" == *"/"* ]]; then
+          FULL_TEMPLATE_PATH="$TEMPLATE_FILE"
+        else
+          FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
+        fi
+
+        echo "📁 Resolved template path: $FULL_TEMPLATE_PATH"
+
+        if [[ ! -d "$TEMPLATE_DIR" ]]; then
+          echo "::error::CloudFormation directory not found: $TEMPLATE_DIR"
+          echo "result=failure" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [[ ! -f "$FULL_TEMPLATE_PATH" ]]; then
+          echo "::error::Template file not found: $FULL_TEMPLATE_PATH"
+          ls -la "$TEMPLATE_DIR" || echo "Unable to list directory"
+          echo "result=failure" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [[ ! -r "$FULL_TEMPLATE_PATH" ]]; then
+          echo "::error::Template file is not readable: $FULL_TEMPLATE_PATH"
+          echo "result=failure" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        FILE_SIZE=$(stat -c%s "$FULL_TEMPLATE_PATH" 2>/dev/null || stat -f%z "$FULL_TEMPLATE_PATH" 2>/dev/null || echo "0")
+        MAX_SIZE=51200
+
+        if [[ "$FILE_SIZE" -eq 0 ]]; then
+          echo "::error::Template file is empty: $FULL_TEMPLATE_PATH"
+          echo "result=failure" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        if [[ "$FILE_SIZE" -gt "$MAX_SIZE" ]]; then
+          echo "::error::Template size exceeds the 51,200 byte limit for --template-body. Current size: $FILE_SIZE bytes"
+          echo "result=failure" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        echo "✅ Template file found: $FULL_TEMPLATE_PATH"
+        echo "📏 Template file size: ${FILE_SIZE} bytes"
+
+        echo "::group::📄 Template File Preview (first 10 lines)"
+        head -10 "$FULL_TEMPLATE_PATH" || echo "Unable to preview template"
+        echo "::endgroup::"
+
+    - name: Validate the CloudFormation template
+      id: validate-cloudformation-template
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+
+        TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
+        TEMPLATE_FILE="${{ inputs.template-file }}"
+
+        # Use template-file directly if it includes a slash or is absolute
+        if [[ "$TEMPLATE_FILE" = /* || "$TEMPLATE_FILE" == *"/"* ]]; then
+          FULL_TEMPLATE_PATH="$TEMPLATE_FILE"
+        else
+          FULL_TEMPLATE_PATH="${TEMPLATE_DIR}/${TEMPLATE_FILE}"
+        fi
+
+        OUTPUT_DIR="${TEMPLATE_DIR}/validation-output"
+
+        mkdir -p "$OUTPUT_DIR"
+
+        echo "🔎 Running CloudFormation validate-template on $FULL_TEMPLATE_PATH"
+
+        aws cloudformation validate-template \
+          --template-body "file://$FULL_TEMPLATE_PATH" \
+          --region "${{ inputs.aws-region }}" \
+          --output json \
+          > "$OUTPUT_DIR/template-validation.json" \
+          2> "$OUTPUT_DIR/template-errors.log"
+
+        VALIDATION_EXIT_CODE=$?
+
+        if [[ $VALIDATION_EXIT_CODE -ne 0 ]]; then
+          exit $VALIDATION_EXIT_CODE
+        fi
+
+    - name: Validation summary
+      id: summary
+      if: always()
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+
+        TEMPLATE_DIR="${{ inputs.cloudformation-dir }}"
+        OUTPUT_DIR="${TEMPLATE_DIR}/validation-output"
+        SUMMARY_FILE_SUCCESS="${OUTPUT_DIR}/template-validation.json"
+        SUMMARY_FILE_ERRORS="${OUTPUT_DIR}/template-errors.log"
+
+        echo "::group::📊 Validation Summary"
+        echo "📅 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "📁 Output Directory: $OUTPUT_DIR"
+
+        SUMMARY_MARKDOWN="### 📊 CloudFormation Template Validation Summary\n\n"
+
+        if [[ -s "$SUMMARY_FILE_SUCCESS" ]]; then
+          SUMMARY_MARKDOWN+="✅ **Validation Passed**\n\n"
+          SUMMARY_MARKDOWN+="<details><summary>📄 Validation Output (click to expand)</summary>\n\n\`\`\`json\n"
+          SUMMARY_MARKDOWN+=$(<"$SUMMARY_FILE_SUCCESS")
+          SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
+          echo "validation-result=success" >> "$GITHUB_OUTPUT"
+
+        elif [[ -s "$SUMMARY_FILE_ERRORS" ]]; then
+          SUMMARY_MARKDOWN+="❌ **Validation Failed**\n\n"
+          SUMMARY_MARKDOWN+="<details><summary>🚫 Error Log (click to expand)</summary>\n\n\`\`\`text\n"
+          SUMMARY_MARKDOWN+=$(<"$SUMMARY_FILE_ERRORS")
+          SUMMARY_MARKDOWN+="\n\`\`\`\n</details>\n"
+          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+        else
+          SUMMARY_MARKDOWN+="⚠️ **No validation output or errors found** — unexpected state\n"
+          echo "validation-result=failure" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "::endgroup::"
+
+        # Write Markdown summary to GitHub Action summary panel
+        echo -e "$SUMMARY_MARKDOWN" >> "$GITHUB_STEP_SUMMARY"
