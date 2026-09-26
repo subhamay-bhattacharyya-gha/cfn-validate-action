@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Key Architecture
 
 ### Action Structure
+
 The action is a **composite action** (defined in `action.yaml`). Each workflow step is a self-contained Bash script that runs in sequence:
 
 1. **Print Inputs for Debugging** — logs configuration for troubleshooting
@@ -22,7 +23,9 @@ The action is a **composite action** (defined in `action.yaml`). Each workflow s
 4. **Validation summary** — generates markdown summary and output artifacts
 
 ### Test Strategy
+
 Test fixtures in `tests/fixtures/` represent different scenarios:
+
 - `valid-templates/` — templates that pass validation
 - `invalid-templates/` — templates with syntax errors
 - `nested-templates/` — templates with nested stacks
@@ -32,13 +35,16 @@ Test fixtures in `tests/fixtures/` represent different scenarios:
 Tests run via `.github/workflows/test.yml` using GitHub Actions against test fixtures.
 
 ### Release Process
+
 Semantic-release automates versioning and publishing:
+
 - Custom plugins in `scripts/plugins/` extend standard semantic-release behavior
 - Configured in `.releaserc.json` and `package.json`
 - Runs on pushes to `main` branch
 - Creates tags, updates CHANGELOG, pushes to GitHub
 
 ### Dependency Management
+
 - Uses npm for JavaScript dependencies (semantic-release, commitizen)
 - `package.json` defines all devDependencies
 - No application runtime dependencies — this is a pure Bash action
@@ -46,7 +52,9 @@ Semantic-release automates versioning and publishing:
 ## Common Development Tasks
 
 ### Validate Changes Locally
+
 Before committing, test the action against fixtures:
+
 ```bash
 # Check syntax of action.yaml
 cat action.yaml | grep -E "^[a-z]" | head -20
@@ -57,14 +65,18 @@ cat action.yaml | grep -E "^[a-z]" | head -20
 ```
 
 ### Run Tests
+
 Tests are defined in `.github/workflows/test.yml`. They run automatically on push to `main` or `develop`, and on pull requests. To run tests locally:
+
 ```bash
 # Test fixtures are in tests/fixtures/ with various template scenarios
 # Each fixture directory contains templates to test different validation paths
 ```
 
 ### Make a Commit
+
 This project uses **Conventional Commits** and Commitizen:
+
 ```bash
 npm run cz  # Interactive commit tool (if available)
 # OR manually follow the format: type(scope): description
@@ -74,12 +86,15 @@ npm run cz  # Interactive commit tool (if available)
 ```
 
 ### Prepare a Release
+
 Semantic-release handles this automatically on `main`, but if you need to manually run it:
+
 ```bash
 npm run release
 ```
 
 ### Update Dependencies
+
 ```bash
 npm update          # Update to latest versions within package.json constraints
 npm audit           # Check for security vulnerabilities
@@ -100,6 +115,7 @@ npm audit fix       # Auto-fix vulnerabilities (if available)
 ## CloudFormation Validation Details
 
 The action calls AWS CloudFormation's `validate-template` API (step: "Validate the CloudFormation template"):
+
 ```bash
 aws cloudformation validate-template \
   --template-body "file://$FULL_TEMPLATE_PATH" \
@@ -108,6 +124,7 @@ aws cloudformation validate-template \
 ```
 
 **Constraints**:
+
 - Template body max size: 51.2 KB (enforced in step: "Validate CloudFormation directory and template")
 - Requires AWS credentials configured (from caller workflow, not action's responsibility)
 - Outputs validation result JSON or errors to `{cloudformation-dir}/validation-output/`
@@ -115,25 +132,30 @@ aws cloudformation validate-template \
 ## Inputs & Outputs
 
 **Inputs** (defined in `action.yaml`):
+
 - `cloudformation-dir` — directory containing templates (default: `.`)
 - `template-file` — template filename (default: `template.yaml`)
 - `aws-region` — AWS region (default: `us-east-1`)
 - `aws-role-arn` — required; IAM role for AWS credential assumption
 
 **Outputs**:
+
 - `validation-result` — `success` or `failure`
 
 ## Debugging
 
 ### Check GitHub Action Logs
+
 - Workflow runs in `.github/workflows/`
 - Each step logs details (directory, file path, AWS region, etc.)
 - Validation errors are captured in `{cloudformation-dir}/validation-output/template-errors.log`
 
 ### Enable Verbose Logging
+
 Set `ACTIONS_STEP_DEBUG=true` in repository secrets for step-by-step debugging.
 
 ### Test Template Locally
+
 ```bash
 # If AWS credentials are configured locally:
 aws cloudformation validate-template \
@@ -143,6 +165,7 @@ aws cloudformation validate-template \
 ```
 
 ### Nested Templates
+
 If testing nested templates, ensure all nested template files are in a `nested-templates/` subdirectory alongside the main template. The action does **not** automatically validate nested templates — it only validates the main template syntax.
 
 ## Repository Conventions
