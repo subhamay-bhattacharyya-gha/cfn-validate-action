@@ -15,11 +15,11 @@ permissions:
 jobs:
   test-valid-templates:
     name: Test Valid CloudFormation Templates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -57,11 +57,11 @@ jobs:
 
   test-invalid-templates:
     name: Test Invalid CloudFormation Templates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -117,11 +117,11 @@ jobs:
 
   test-nested-templates:
     name: Test Nested Templates Validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -171,11 +171,11 @@ jobs:
 
   test-parameters-validation:
     name: Test Parameters File Validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -246,11 +246,11 @@ jobs:
 
   test-edge-cases:
     name: Test Edge Cases
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -306,7 +306,7 @@ jobs:
 
   test-summary:
     name: Test Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [test-valid-templates, test-invalid-templates, test-nested-templates, test-parameters-validation, test-edge-cases]
     if: always()
     

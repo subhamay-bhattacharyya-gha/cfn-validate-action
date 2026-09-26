@@ -57,7 +57,7 @@ All notable changes to this project will be documented in this file.
   - Enables dynamic parameter handling without creating intermediate files
 
 - **action**: Removed built-in repository checkout and AWS credentials configuration steps
-  - The action no longer includes `actions/checkout@v4` step
+  - The action no longer includes `actions/checkout@v7.0.1` step
   - The action no longer includes `aws-actions/configure-aws-credentials@v4` step
   - Caller workflows must now include these steps before calling this action
   - This change provides more flexibility for users to configure checkout and AWS credentials according to their specific needs
@@ -69,7 +69,7 @@ If you're upgrading from a previous version, you need to add these steps to your
 ```yaml
 steps:
   - name: Checkout repository
-    uses: actions/checkout@v4
+    uses: actions/checkout@v7.0.1
 
   - name: Configure AWS credentials
     uses: aws-actions/configure-aws-credentials@v4
